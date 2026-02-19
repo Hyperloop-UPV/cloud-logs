@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/Hyperloop-UPV/cloud-logs/pkg/auth"
 	"github.com/gin-gonic/gin"
@@ -11,16 +12,21 @@ import (
 type Handler struct{
 	db *sql.DB
 	passwordHash string
+
+	jwtSecret string
+	jwtTTL    time.Duration
 }
 
 type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
-func NewHandler(db *sql.DB, passwordHash string) *Handler {
+func NewHandler(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL time.Duration) *Handler {
 	return &Handler{
 		db: db, 
 		passwordHash: passwordHash,
+		jwtSecret: jwtSecret,
+		jwtTTL: jwtTTL,
 	}
 }
 
@@ -46,8 +52,16 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
+	token, expiresIn, err := auth.GenerateToken(h.jwtSecret, h.jwtTTL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"access":  true,
-		"message": "login successful",
+		"access":       true,
+		"access_token": token,
+		"token_type":   "Bearer",
+		"expires_in":   expiresIn,
 	})
 }
