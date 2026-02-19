@@ -136,3 +136,68 @@ func GetAllLogs(db *sql.DB) ([]LogRow, error) {
 	}
 	return out, nil
 }
+
+func GetAllDataLogs(db *sql.DB) ([]DataLogRow, error) {
+	rows, err := db.Query(`
+		SELECT measurement, relative_timestamp, from_node, to_node, value
+		FROM save_logs
+		ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("get all data logs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]DataLogRow, 0)
+	for rows.Next() {
+		var r DataLogRow
+		if err := rows.Scan(
+			&r.Measurement,
+			&r.RelativeTimestamp,
+			&r.From,
+			&r.To,
+			&r.Value,
+		); err != nil {
+			return nil, fmt.Errorf("scan data log: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate data logs: %w", err)
+	}
+
+	return out, nil
+}
+
+func GetAllOrderLogs(db *sql.DB) ([]OrderLogRow, error) {
+	rows, err := db.Query(`
+		SELECT relative_timestamp, from_node, to_node, packet_id, value, packet_timestamp_rfc3339
+		FROM order_logs
+		ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("get all order logs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]OrderLogRow, 0)
+	for rows.Next() {
+		var r OrderLogRow
+		if err := rows.Scan(
+			&r.RelativeTimestamp,
+			&r.FromNode,
+			&r.ToNode,
+			&r.PacketID,
+			&r.Values,
+			&r.PacketTimestampRFC3339,
+		); err != nil {
+			return nil, fmt.Errorf("scan order log: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate order logs: %w", err)
+	}
+
+	return out, nil
+}

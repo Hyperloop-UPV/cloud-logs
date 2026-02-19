@@ -139,15 +139,20 @@ func (h *Handler) SaveOrderLog(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"status": "saved"})
 }
 
-func (h *Handler) LoadLogs(c *gin.Context) {
-	logs, err := store.GetAllLogs(h.db)
+func (h *Handler) LoadDataLogs(c *gin.Context) {
+	logs, err := store.GetAllDataLogs(h.db)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load logs"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load data logs"})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{"count": len(logs), "logs": logs})
+}
 
-	c.JSON(http.StatusOK, gin.H{
-		"count": len(logs),
-		"logs":  logs,
-	})
+func (h *Handler) LoadOrderLogs(c *gin.Context) {
+	logs, err := store.GetAllOrderLogs(h.db)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load order logs"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": len(logs), "logs": logs})
 }
