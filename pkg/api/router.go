@@ -17,6 +17,7 @@ func NewRouter(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL int64) 
 	// TDO: uncomment when logs saving and loading is implemented
 	//logs.Use(AuthMiddleware(jwtSecret))
 	logs.POST("/save/data", h.SaveDataLog)
+	logs.POST("/save/order", h.SaveOrderLog)
 	logs.GET("/load", h.LoadLogs)
 
 	return r

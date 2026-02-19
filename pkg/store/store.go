@@ -16,6 +16,15 @@ type DataLogRow struct {
 	Value             float64
 }
 
+type OrderLogRow struct {
+	RelativeTimestamp      int64
+	FromNode               string
+	ToNode                 string
+	PacketID               string
+	Values                 string
+	PacketTimestampRFC3339 string
+}
+
 // TDO: remove when not needed anymore
 type LogRow struct {
 	ID        int64  `json:"id"`
@@ -52,13 +61,24 @@ func NewSQLiteDB(path string) (*sql.DB, error) {
 
 func InitSchema(db *sql.DB) error {
 	const q = `
-	CREATE TABLE IF NOT EXISTS logs (
+	CREATE TABLE IF NOT EXISTS save_logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		measurement TEXT NOT NULL,
 		relative_timestamp INTEGER NOT NULL,
 		from_node TEXT NOT NULL,
 		to_node TEXT NOT NULL,
 		value REAL NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	
+	CREATE TABLE IF NOT EXISTS order_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		relative_timestamp INTEGER NOT NULL,
+		from_node TEXT NOT NULL,
+		to_node TEXT NOT NULL,
+		packet_id TEXT NOT NULL,
+		value TEXT NOT NULL,
+		packet_timestamp_rfc3339 TEXT NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err := db.Exec(q)
@@ -70,11 +90,23 @@ func InitSchema(db *sql.DB) error {
 
 func SaveDataLog(db *sql.DB, row DataLogRow) error {
 	_, err := db.Exec(`
-		INSERT INTO logs(measurement, relative_timestamp, from_node, to_node, value)
+		INSERT INTO save_logs(measurement, relative_timestamp, from_node, to_node, value)
 		VALUES(?, ?, ?, ?, ?)
 	`, row.Measurement, row.RelativeTimestamp, row.From, row.To, row.Value)
 	if err != nil {
 		return fmt.Errorf("save data log: %w", err)
+	}
+	return nil
+}
+
+func SaveOrderLog(db *sql.DB, row OrderLogRow) error {
+	_, err := db.Exec(`
+		INSERT INTO order_logs(
+			relative_timestamp, from_node, to_node, packet_id, value, packet_timestamp_rfc3339
+		) VALUES(?, ?, ?, ?, ?, ?)
+	`, row.RelativeTimestamp, row.FromNode, row.ToNode, row.PacketID, row.Values, row.PacketTimestampRFC3339)
+	if err != nil {
+		return fmt.Errorf("save order log: %w", err)
 	}
 	return nil
 }
