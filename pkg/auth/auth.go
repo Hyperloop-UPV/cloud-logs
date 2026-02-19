@@ -28,3 +28,10 @@ func GenerateToken(secret string, ttl time.Duration) (string, int64, error) {
 
 	return signed, int64(ttl.Seconds()), nil
 }
+
+func ValidateToken(tokenStr, secret string) error {
+	_, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+	return err
+}
