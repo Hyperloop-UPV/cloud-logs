@@ -8,6 +8,15 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+type DataLogRow struct {
+	Measurement       string
+	RelativeTimestamp int64
+	From              string
+	To                string
+	Value             float64
+}
+
+// TDO: remove when not needed anymore
 type LogRow struct {
 	ID        int64  `json:"id"`
 	Message   string `json:"message"`
@@ -45,7 +54,11 @@ func InitSchema(db *sql.DB) error {
 	const q = `
 	CREATE TABLE IF NOT EXISTS logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		message TEXT NOT NULL,
+		measurement TEXT NOT NULL,
+		relative_timestamp INTEGER NOT NULL,
+		from_node TEXT NOT NULL,
+		to_node TEXT NOT NULL,
+		value REAL NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err := db.Exec(q)
@@ -55,14 +68,18 @@ func InitSchema(db *sql.DB) error {
 	return nil
 }
 
-func SaveLogMessage(db *sql.DB, message string) error {
-	_, err := db.Exec(`INSERT INTO logs(message) VALUES(?)`, message)
+func SaveDataLog(db *sql.DB, row DataLogRow) error {
+	_, err := db.Exec(`
+		INSERT INTO logs(measurement, relative_timestamp, from_node, to_node, value)
+		VALUES(?, ?, ?, ?, ?)
+	`, row.Measurement, row.RelativeTimestamp, row.From, row.To, row.Value)
 	if err != nil {
-		return fmt.Errorf("save log message: %w", err)
+		return fmt.Errorf("save data log: %w", err)
 	}
 	return nil
 }
 
+// TDO: change to a real load logs
 func GetAllLogs(db *sql.DB) ([]LogRow, error) {
 	rows, err := db.Query(`
 		SELECT id, message, created_at
