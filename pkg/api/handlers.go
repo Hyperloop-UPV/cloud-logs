@@ -93,3 +93,16 @@ func (h *Handler) SaveLog(c *gin.Context) {
 		"message": req.Message,
 	})
 }
+
+func (h *Handler) LoadLogs(c *gin.Context) {
+	logs, err := store.GetAllLogs(h.db)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load logs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(logs),
+		"logs":  logs,
+	})
+}

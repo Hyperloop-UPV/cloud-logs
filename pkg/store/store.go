@@ -8,6 +8,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+type LogRow struct {
+	ID        int64  `json:"id"`
+	Message   string `json:"message"`
+	CreatedAt string `json:"created_at"`
+}
+
 func InitDb() (*sql.DB, error) {
 	dbPath := os.Getenv("DATABASE_PATH")
 	if dbPath == "" {
@@ -55,4 +61,29 @@ func SaveLogMessage(db *sql.DB, message string) error {
 		return fmt.Errorf("save log message: %w", err)
 	}
 	return nil
+}
+
+func GetAllLogs(db *sql.DB) ([]LogRow, error) {
+	rows, err := db.Query(`
+		SELECT id, message, created_at
+		FROM logs
+		ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("get all logs: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]LogRow, 0)
+	for rows.Next() {
+		var r LogRow
+		if err := rows.Scan(&r.ID, &r.Message, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan log row: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate log rows: %w", err)
+	}
+	return out, nil
 }

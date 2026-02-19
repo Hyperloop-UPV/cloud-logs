@@ -16,6 +16,7 @@ func NewRouter(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL int64) 
 	logs := r.Group("/logs")
 	logs.Use(AuthMiddleware(jwtSecret))
 	logs.POST("/save", h.SaveLog)
+	logs.GET("/load", h.LoadLogs)
 
 	return r
 }
