@@ -2,35 +2,52 @@ package api
 
 import (
 	"database/sql"
-	"fmt"
-	"io"
 	"net/http"
 
-	"github.com/Hyperloop-UPV/cloud-logs/pkg/store"
+	"github.com/Hyperloop-UPV/cloud-logs/pkg/auth"
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct{
 	db *sql.DB
+	passwordHash string
 }
 
-func NewHandler(db *sql.DB) *Handler {
-	return &Handler{db: db}
+type LoginRequest struct {
+	Password string `json:"password" binding:"required"`
+}
+
+func NewHandler(db *sql.DB, passwordHash string) *Handler {
+	return &Handler{
+		db: db, 
+		passwordHash: passwordHash,
+	}
 }
 
 func (h *Handler) Login(c *gin.Context) {
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+	var req LoginRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid_request",
+			"message": "password is required",
+		})
 		return
 	}
 
-	fmt.Printf("login input received: %s\n", string(body))
 
-	if err := store.SaveLoginInput(h.db, string(body)); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save login input"})
+	//fmt.Printf("login input received: %s\n", req.Password)
+
+	if !auth.CheckPasswordHash(req.Password, h.passwordHash) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"access":  false,
+			"message": "invalid credentials",
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	c.JSON(http.StatusOK, gin.H{
+		"access":  true,
+		"message": "login successful",
+	})
 }
