@@ -1,11 +1,15 @@
 package api
 
-import "github.com/gin-gonic/gin"
+import (
+	"database/sql"
 
-func NewRouter() *gin.Engine {
+	"github.com/gin-gonic/gin"
+)
+
+func NewRouter(db *sql.DB) *gin.Engine {
 	r := gin.Default()
 
-	h := NewHandler()
+	h := NewHandler(db)
 	r.POST("/auth/login", h.Login)
 
 	return r

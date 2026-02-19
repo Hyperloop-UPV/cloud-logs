@@ -1,2 +1,5 @@
 # Binaries
 cloud-logs
+
+# Persistent data
+cloud-logs.db
