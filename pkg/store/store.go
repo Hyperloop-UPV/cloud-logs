@@ -37,9 +37,9 @@ func NewSQLiteDB(path string) (*sql.DB, error) {
 
 func InitSchema(db *sql.DB) error {
 	const q = `
-	CREATE TABLE IF NOT EXISTS login_inputs (
+	CREATE TABLE IF NOT EXISTS logs (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		payload TEXT NOT NULL,
+		message TEXT NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err := db.Exec(q)
@@ -49,10 +49,10 @@ func InitSchema(db *sql.DB) error {
 	return nil
 }
 
-func SaveLoginInput(db *sql.DB, payload string) error {
-	_, err := db.Exec(`INSERT INTO login_inputs(payload) VALUES(?)`, payload)
+func SaveLogMessage(db *sql.DB, message string) error {
+	_, err := db.Exec(`INSERT INTO logs(message) VALUES(?)`, message)
 	if err != nil {
-		return fmt.Errorf("save login input: %w", err)
+		return fmt.Errorf("save log message: %w", err)
 	}
 	return nil
 }

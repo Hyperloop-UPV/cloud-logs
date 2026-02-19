@@ -12,6 +12,7 @@ func NewRouter(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL int64) 
 
 	h := NewHandler(db, passwordHash, jwtSecret, time.Duration(jwtTTL)*time.Second)
 	r.POST("/auth/login", h.Login)
+	r.POST("/logs/save", h.SaveLog)
 
 	return r
 }
