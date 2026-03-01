@@ -8,21 +8,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type DataLogRow struct {
-	Measurement       string
-	RelativeTimestamp int64
-	From              string
-	To                string
-	Value             float64
-}
-
-type OrderLogRow struct {
-	RelativeTimestamp      int64
-	FromNode               string
-	ToNode                 string
-	PacketID               string
-	Values                 string
-	PacketTimestampRFC3339 string
+type UploadedArchive struct {
+	ID          int64
+	Filename    string
+	ContentType string
+	SizeBytes   int64
+	FileData    []byte
 }
 
 func InitDb() (*sql.DB, error) {
@@ -53,28 +44,7 @@ func NewSQLiteDB(path string) (*sql.DB, error) {
 }
 
 func InitSchema(db *sql.DB) error {
-	const q = `
-	CREATE TABLE IF NOT EXISTS save_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		measurement TEXT NOT NULL,
-		relative_timestamp INTEGER NOT NULL,
-		from_node TEXT NOT NULL,
-		to_node TEXT NOT NULL,
-		value REAL NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);
-	
-	CREATE TABLE IF NOT EXISTS order_logs (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		relative_timestamp INTEGER NOT NULL,
-		from_node TEXT NOT NULL,
-		to_node TEXT NOT NULL,
-		packet_id TEXT NOT NULL,
-		value TEXT NOT NULL,
-		packet_timestamp_rfc3339 TEXT NOT NULL,
-		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-	);
-	
+	const q = `	
 	CREATE TABLE IF NOT EXISTS uploaded_archives (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		filename TEXT NOT NULL,
@@ -101,67 +71,23 @@ func UploadArchive(db *sql.DB, filename, contentType string, sizeBytes int64, fi
 	return nil
 }
 
-func GetAllDataLogs(db *sql.DB) ([]DataLogRow, error) {
-	rows, err := db.Query(`
-		SELECT measurement, relative_timestamp, from_node, to_node, value
-		FROM save_logs
-		ORDER BY id DESC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("get all data logs: %w", err)
-	}
-	defer rows.Close()
+func GetArchiveByID(db *sql.DB, id int64) (*UploadedArchive, error) {
+	row := db.QueryRow(`
+		SELECT id, filename, content_type, size_bytes, file_data
+		FROM uploaded_archives
+		WHERE id = ?
+	`, id)
 
-	out := make([]DataLogRow, 0)
-	for rows.Next() {
-		var r DataLogRow
-		if err := rows.Scan(
-			&r.Measurement,
-			&r.RelativeTimestamp,
-			&r.From,
-			&r.To,
-			&r.Value,
-		); err != nil {
-			return nil, fmt.Errorf("scan data log: %w", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate data logs: %w", err)
+	var archive UploadedArchive
+	if err := row.Scan(
+		&archive.ID,
+		&archive.Filename,
+		&archive.ContentType,
+		&archive.SizeBytes,
+		&archive.FileData,
+	); err != nil {
+		return nil, err
 	}
 
-	return out, nil
-}
-
-func GetAllOrderLogs(db *sql.DB) ([]OrderLogRow, error) {
-	rows, err := db.Query(`
-		SELECT relative_timestamp, from_node, to_node, packet_id, value, packet_timestamp_rfc3339
-		FROM order_logs
-		ORDER BY id DESC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("get all order logs: %w", err)
-	}
-	defer rows.Close()
-
-	out := make([]OrderLogRow, 0)
-	for rows.Next() {
-		var r OrderLogRow
-		if err := rows.Scan(
-			&r.RelativeTimestamp,
-			&r.FromNode,
-			&r.ToNode,
-			&r.PacketID,
-			&r.Values,
-			&r.PacketTimestampRFC3339,
-		); err != nil {
-			return nil, fmt.Errorf("scan order log: %w", err)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate order logs: %w", err)
-	}
-
-	return out, nil
+	return &archive, nil
 }

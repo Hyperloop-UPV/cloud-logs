@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Hyperloop-UPV/cloud-logs/pkg/auth"
@@ -21,27 +22,6 @@ type Handler struct{
 
 type LoginRequest struct {
 	Password string `json:"password" binding:"required"`
-}
-
-type SaveLogRequest struct {
-	Message string `json:"message" binding:"required"`
-}
-
-type SaveDataLogRequest struct {
-	Measurement       string  `json:"measurement" binding:"required"`
-	RelativeTimestamp int64   `json:"relative_timestamp" binding:"required"`
-	From              string  `json:"from" binding:"required"`
-	To                string  `json:"to" binding:"required"`
-	Value             float64 `json:"value" binding:"required"`
-}
-
-type SaveOrderLogRequest struct {
-	RelativeTimestamp      int64  `json:"relative_timestamp" binding:"required"`
-	From               	   string `json:"from" binding:"required"`
-	To                 	   string `json:"to" binding:"required"`
-	PacketID               string `json:"packet_id" binding:"required"`
-	Values                 string `json:"values" binding:"required"`
-	PacketTimestampRFC3339 string `json:"packet_timestamp_rfc3339" binding:"required"`
 }
 
 func NewHandler(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL time.Duration) *Handler {
@@ -137,20 +117,34 @@ func (h *Handler) UploadArchive(c *gin.Context) {
 	})
 }
 
-func (h *Handler) LoadDataLogs(c *gin.Context) {
-	logs, err := store.GetAllDataLogs(h.db)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load data logs"})
+func (h *Handler) DownloadLogsArchive(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseInt(idParam, 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "invalid_request",
+			"message": "invalid archive id",
+		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"count": len(logs), "logs": logs})
-}
 
-func (h *Handler) LoadOrderLogs(c *gin.Context) {
-	logs, err := store.GetAllOrderLogs(h.db)
+	archive, err := store.GetArchiveByID(h.db, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load order logs"})
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "not_found",
+				"message": "archive not found",
+			})
+			return
+		}
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to load archive",
+		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"count": len(logs), "logs": logs})
+
+	c.Header("Content-Type", archive.ContentType)
+	c.Header("Content-Disposition", `attachment; filename="`+archive.Filename+`"`)
+	c.Data(http.StatusOK, archive.ContentType, archive.FileData)
 }
