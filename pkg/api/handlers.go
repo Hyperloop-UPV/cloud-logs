@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"io"
 	"net/http"
 	"time"
 
@@ -88,55 +89,52 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-func (h *Handler) SaveDataLog(c *gin.Context) {
-	var req SaveDataLogRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+func (h *Handler) UploadArchive(c *gin.Context) {
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "invalid_request",
-			"message": "measurement, relative_timestamp, from, to, value are required",
+			"message": "file is required",
 		})
 		return
 	}
 
-	err := store.SaveDataLog(h.db, store.DataLogRow{
-		Measurement:       req.Measurement,
-		RelativeTimestamp: req.RelativeTimestamp,
-		From:         	   req.From,
-		To:                req.To,
-		Value:             req.Value,
-	})
+	file, err := fileHeader.Open()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save data log"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to open uploaded file",
+		})
 		return
 	}
+	defer file.Close()
 
-	c.JSON(http.StatusCreated, gin.H{"status": "saved"})
-}
-
-func (h *Handler) SaveOrderLog(c *gin.Context) {
-	var req SaveOrderLogRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "invalid_request",
-			"message": "relative_timestamp, from, to, packet_id, values, packet_timestamp_rfc3339 are required",
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to read uploaded file",
 		})
 		return
 	}
 
-	err := store.SaveOrderLog(h.db, store.OrderLogRow{
-		RelativeTimestamp:      req.RelativeTimestamp,
-		FromNode:               req.From,
-		ToNode:                 req.To,
-		PacketID:               req.PacketID,
-		Values:                 req.Values,
-		PacketTimestampRFC3339: req.PacketTimestampRFC3339,
-	})
+	contentType := fileHeader.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	err = store.UploadArchive(h.db, fileHeader.Filename, contentType, fileHeader.Size, fileData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save order log"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to save uploaded archive",
+		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"status": "saved"})
+	c.JSON(http.StatusCreated, gin.H{
+		"status":       "saved",
+		"filename":     fileHeader.Filename,
+		"size_bytes":   fileHeader.Size,
+		"content_type": contentType,
+	})
 }
 
 func (h *Handler) LoadDataLogs(c *gin.Context) {

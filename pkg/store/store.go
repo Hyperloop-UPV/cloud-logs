@@ -73,6 +73,15 @@ func InitSchema(db *sql.DB) error {
 		value TEXT NOT NULL,
 		packet_timestamp_rfc3339 TEXT NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	
+	CREATE TABLE IF NOT EXISTS uploaded_archives (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		filename TEXT NOT NULL,
+		content_type TEXT NOT NULL,
+		size_bytes INTEGER NOT NULL,
+		file_data BLOB NOT NULL,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);`
 	_, err := db.Exec(q)
 	if err != nil {
@@ -81,25 +90,13 @@ func InitSchema(db *sql.DB) error {
 	return nil
 }
 
-func SaveDataLog(db *sql.DB, row DataLogRow) error {
+func UploadArchive(db *sql.DB, filename, contentType string, sizeBytes int64, fileData []byte) error {
 	_, err := db.Exec(`
-		INSERT INTO save_logs(measurement, relative_timestamp, from_node, to_node, value)
-		VALUES(?, ?, ?, ?, ?)
-	`, row.Measurement, row.RelativeTimestamp, row.From, row.To, row.Value)
+		INSERT INTO uploaded_archives(filename, content_type, size_bytes, file_data)
+		VALUES(?, ?, ?, ?)
+	`, filename, contentType, sizeBytes, fileData)
 	if err != nil {
-		return fmt.Errorf("save data log: %w", err)
-	}
-	return nil
-}
-
-func SaveOrderLog(db *sql.DB, row OrderLogRow) error {
-	_, err := db.Exec(`
-		INSERT INTO order_logs(
-			relative_timestamp, from_node, to_node, packet_id, value, packet_timestamp_rfc3339
-		) VALUES(?, ?, ?, ?, ?, ?)
-	`, row.RelativeTimestamp, row.FromNode, row.ToNode, row.PacketID, row.Values, row.PacketTimestampRFC3339)
-	if err != nil {
-		return fmt.Errorf("save order log: %w", err)
+		return fmt.Errorf("save uploaded archive: %w", err)
 	}
 	return nil
 }
