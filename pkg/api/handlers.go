@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Handler struct{
-	db *sql.DB
+type Handler struct {
+	db           *sql.DB
 	passwordHash string
 
 	jwtSecret string
@@ -26,10 +26,10 @@ type LoginRequest struct {
 
 func NewHandler(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL time.Duration) *Handler {
 	return &Handler{
-		db: db, 
+		db:           db,
 		passwordHash: passwordHash,
-		jwtSecret: jwtSecret,
-		jwtTTL: jwtTTL,
+		jwtSecret:    jwtSecret,
+		jwtTTL:       jwtTTL,
 	}
 }
 
@@ -43,7 +43,6 @@ func (h *Handler) Login(c *gin.Context) {
 		})
 		return
 	}
-
 
 	//fmt.Printf("login input received: %s\n", req.Password)
 
@@ -67,6 +66,19 @@ func (h *Handler) Login(c *gin.Context) {
 		"token_type":   "Bearer",
 		"expires_in":   expiresIn,
 	})
+}
+
+func (h *Handler) ListUploadedArchives(c *gin.Context) {
+	archives, err := store.ListUploadedArchives(h.db)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "failed to list uploaded archives",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, archives)
 }
 
 func (h *Handler) UploadArchive(c *gin.Context) {
@@ -101,7 +113,7 @@ func (h *Handler) UploadArchive(c *gin.Context) {
 		contentType = "application/octet-stream"
 	}
 
-	err = store.UploadArchive(h.db, fileHeader.Filename, contentType, fileHeader.Size, fileData)
+	id, err := store.UploadArchive(h.db, fileHeader.Filename, contentType, fileHeader.Size, fileData)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "failed to save uploaded archive",
@@ -114,6 +126,7 @@ func (h *Handler) UploadArchive(c *gin.Context) {
 		"filename":     fileHeader.Filename,
 		"size_bytes":   fileHeader.Size,
 		"content_type": contentType,
+		"file_id":      id,
 	})
 }
 

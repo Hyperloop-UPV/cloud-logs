@@ -9,11 +9,11 @@ import (
 )
 
 type UploadedArchive struct {
-	ID          int64
-	Filename    string
-	ContentType string
-	SizeBytes   int64
-	FileData    []byte
+	ID          int64  `json:"id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+	FileData    []byte `json:"-"`
 }
 
 func InitDb() (*sql.DB, error) {
@@ -60,15 +60,51 @@ func InitSchema(db *sql.DB) error {
 	return nil
 }
 
-func UploadArchive(db *sql.DB, filename, contentType string, sizeBytes int64, fileData []byte) error {
-	_, err := db.Exec(`
+func ListUploadedArchives(db *sql.DB) ([]UploadedArchive, error) {
+	rows, err := db.Query(`
+		SELECT id, filename, content_type, size_bytes
+		FROM uploaded_archives
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list uploaded archives: %w", err)
+	}
+
+	archives := []UploadedArchive{}
+
+	for rows.Next() {
+		var archive UploadedArchive
+
+		err := rows.Scan(&archive.ID, &archive.Filename, &archive.ContentType, &archive.SizeBytes)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan uploaded archive: %w", err)
+		}
+
+		archives = append(archives, archive)
+	}
+	rows.Close()
+
+	return archives, nil
+}
+
+func UploadArchive(db *sql.DB, filename, contentType string, sizeBytes int64, fileData []byte) (int64, error) {
+	result, err := db.Exec(`
 		INSERT INTO uploaded_archives(filename, content_type, size_bytes, file_data)
 		VALUES(?, ?, ?, ?)
 	`, filename, contentType, sizeBytes, fileData)
+
 	if err != nil {
-		return fmt.Errorf("save uploaded archive: %w", err)
+		// Return id 0 as invalid db index
+		return 0, fmt.Errorf("failed to save archive %s to database: %w", filename, err)
 	}
-	return nil
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		// Return id 0 as invalid db index
+		return 0, fmt.Errorf("error getting last insert id: %w", err)
+	}
+
+	return id, nil
 }
 
 func GetArchiveByID(db *sql.DB, id int64) (*UploadedArchive, error) {
