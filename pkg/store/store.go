@@ -91,3 +91,28 @@ func GetArchiveByID(db *sql.DB, id int64) (*UploadedArchive, error) {
 
 	return &archive, nil
 }
+
+func ListUploadedArchives(db *sql.DB) ([]UploadedArchive, error) {
+	rows, err := db.Query(`
+		SELECT id, filename, content_type, size_bytes, file_data
+		FROM uploaded_archives
+		ORDER BY id DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list uploaded archives: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]UploadedArchive, 0)
+	for rows.Next() {
+		var r UploadedArchive
+		if err := rows.Scan(&r.ID, &r.Filename, &r.ContentType, &r.SizeBytes, &r.FileData); err != nil {
+			return nil, fmt.Errorf("scan uploaded archive: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate uploaded archives: %w", err)
+	}
+	return out, nil
+}

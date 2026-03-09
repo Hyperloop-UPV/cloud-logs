@@ -69,7 +69,7 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-func (h *Handler) UploadArchive(c *gin.Context) {
+func (h *Handler) UploadLog(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -117,7 +117,7 @@ func (h *Handler) UploadArchive(c *gin.Context) {
 	})
 }
 
-func (h *Handler) DownloadLogsArchive(c *gin.Context) {
+func (h *Handler) DownloadLogByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil || id <= 0 {
@@ -147,4 +147,17 @@ func (h *Handler) DownloadLogsArchive(c *gin.Context) {
 	c.Header("Content-Type", archive.ContentType)
 	c.Header("Content-Disposition", `attachment; filename="`+archive.Filename+`"`)
 	c.Data(http.StatusOK, archive.ContentType, archive.FileData)
+}
+
+func (h *Handler) ListLogs(c *gin.Context) {
+	logs, err := store.ListUploadedArchives(h.db)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list downloadable logs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(logs),
+		"logs":  logs,
+	})
 }
