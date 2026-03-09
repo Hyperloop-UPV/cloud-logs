@@ -1,0 +1,14 @@
+services:
+  cloud-logs:
+    image: cloud-logs:latest
+    container_name: cloud-logs
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    volumes:
+      - cloud_logs_data:/data
+    restart: unless-stopped
+
+volumes:
+  cloud_logs_data:

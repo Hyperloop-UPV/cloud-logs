@@ -6,3 +6,7 @@ cloud-logs
 
 # Persistent data
 cloud-logs.db
+
+# Other
+*csv
+*zip

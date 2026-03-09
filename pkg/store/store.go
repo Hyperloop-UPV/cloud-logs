@@ -13,7 +13,7 @@ type UploadedArchive struct {
 	Filename    string
 	ContentType string
 	SizeBytes   int64
-	FileData    []byte
+	FileData    []byte `json:"-"`
 }
 
 func InitDb() (*sql.DB, error) {
@@ -94,7 +94,7 @@ func GetArchiveByID(db *sql.DB, id int64) (*UploadedArchive, error) {
 
 func ListUploadedArchives(db *sql.DB) ([]UploadedArchive, error) {
 	rows, err := db.Query(`
-		SELECT id, filename, content_type, size_bytes, file_data
+		SELECT id, filename, content_type, size_bytes
 		FROM uploaded_archives
 		ORDER BY id DESC
 	`)
@@ -106,7 +106,7 @@ func ListUploadedArchives(db *sql.DB) ([]UploadedArchive, error) {
 	out := make([]UploadedArchive, 0)
 	for rows.Next() {
 		var r UploadedArchive
-		if err := rows.Scan(&r.ID, &r.Filename, &r.ContentType, &r.SizeBytes, &r.FileData); err != nil {
+		if err := rows.Scan(&r.ID, &r.Filename, &r.ContentType, &r.SizeBytes); err != nil {
 			return nil, fmt.Errorf("scan uploaded archive: %w", err)
 		}
 		out = append(out, r)

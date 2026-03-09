@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+cloud-logs
+*.db
+*.db-journal
+tmp
+uploads
+*csv
