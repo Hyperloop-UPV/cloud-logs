@@ -62,12 +62,12 @@ curl -i -X POST http://127.0.0.1:8080/auth/login \
   -d '{"password":"test"}'
 ```
 
-Get token for next calls:
+Tip to store token:
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"password":"test"}' | jq -r '.access_token')
+  -d '{"password":"test"}' | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
 ```
 
 ### POST `/logs/upload`
