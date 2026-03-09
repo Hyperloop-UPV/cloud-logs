@@ -14,8 +14,7 @@ func NewRouter(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL int64) 
 	r.POST("/auth/login", h.Login)
 
 	logs := r.Group("/logs")
-	// TDO: uncomment when logs saving and loading is implemented
-	//logs.Use(AuthMiddleware(jwtSecret))
+	logs.Use(AuthMiddleware(jwtSecret))
 	logs.GET("/list", h.ListLogs)
 	logs.GET("/download/:id", h.DownloadLogByID)
 	logs.POST("/upload", h.UploadLog)
