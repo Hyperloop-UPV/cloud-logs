@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -33,11 +34,20 @@ func NewHandler(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL time.D
 	}
 }
 
+func writeJSON(c *gin.Context, status int, payload any) {
+	b, err := json.Marshal(payload)
+	if err != nil {
+		c.Data(http.StatusInternalServerError, "application/json; charset=utf-8", []byte(`{"error":"marshal_failed"}`+"\n"))
+		return
+	}
+	c.Data(status, "application/json; charset=utf-8", append(b, '\n'))
+}
+
 func (h *Handler) Login(c *gin.Context) {
 	var req LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		writeJSON(c, http.StatusBadRequest, gin.H{
 			"error":   "invalid_request",
 			"message": "password is required",
 		})
@@ -48,7 +58,7 @@ func (h *Handler) Login(c *gin.Context) {
 	//fmt.Printf("login input received: %s\n", req.Password)
 
 	if !auth.CheckPasswordHash(req.Password, h.passwordHash) {
-		c.JSON(http.StatusUnauthorized, gin.H{
+		writeJSON(c, http.StatusUnauthorized, gin.H{
 			"access":  false,
 			"message": "invalid credentials",
 		})
@@ -57,11 +67,11 @@ func (h *Handler) Login(c *gin.Context) {
 
 	token, expiresIn, err := auth.GenerateToken(h.jwtSecret, h.jwtTTL)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		writeJSON(c, http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	writeJSON(c, http.StatusOK, gin.H{
 		"access":       true,
 		"access_token": token,
 		"token_type":   "Bearer",
@@ -72,7 +82,7 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) UploadLog(c *gin.Context) {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		writeJSON(c, http.StatusBadRequest, gin.H{
 			"error":   "invalid_request",
 			"message": "file is required",
 		})
@@ -81,7 +91,7 @@ func (h *Handler) UploadLog(c *gin.Context) {
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
+		writeJSON(c, http.StatusInternalServerError, gin.H{
 			"error": "failed to open uploaded file",
 		})
 		return
@@ -90,7 +100,7 @@ func (h *Handler) UploadLog(c *gin.Context) {
 
 	fileData, err := io.ReadAll(file)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
+		writeJSON(c, http.StatusInternalServerError, gin.H{
 			"error": "failed to read uploaded file",
 		})
 		return
@@ -103,13 +113,13 @@ func (h *Handler) UploadLog(c *gin.Context) {
 
 	err = store.UploadArchive(h.db, fileHeader.Filename, contentType, fileHeader.Size, fileData)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
+		writeJSON(c, http.StatusInternalServerError, gin.H{
 			"error": "failed to save uploaded archive",
 		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	writeJSON(c, http.StatusCreated, gin.H{
 		"status":       "saved",
 		"filename":     fileHeader.Filename,
 		"size_bytes":   fileHeader.Size,
@@ -121,7 +131,7 @@ func (h *Handler) DownloadLogByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id, err := strconv.ParseInt(idParam, 10, 64)
 	if err != nil || id <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
+		writeJSON(c, http.StatusBadRequest, gin.H{
 			"error":   "invalid_request",
 			"message": "invalid archive id",
 		})
@@ -131,14 +141,14 @@ func (h *Handler) DownloadLogByID(c *gin.Context) {
 	archive, err := store.GetArchiveByID(h.db, id)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{
+			writeJSON(c, http.StatusNotFound, gin.H{
 				"error":   "not_found",
 				"message": "archive not found",
 			})
 			return
 		}
 
-		c.JSON(http.StatusInternalServerError, gin.H{
+		writeJSON(c, http.StatusInternalServerError, gin.H{
 			"error": "failed to load archive",
 		})
 		return
@@ -152,11 +162,11 @@ func (h *Handler) DownloadLogByID(c *gin.Context) {
 func (h *Handler) ListLogs(c *gin.Context) {
 	logs, err := store.ListUploadedArchives(h.db)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list downloadable logs"})
+		writeJSON(c, http.StatusInternalServerError, gin.H{"error": "failed to list downloadable logs"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	writeJSON(c, http.StatusOK, gin.H{
 		"count": len(logs),
 		"logs":  logs,
 	})
