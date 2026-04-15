@@ -1,5 +1,8 @@
 services:
   cloud-logs:
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: cloud-logs:latest
     container_name: cloud-logs
     ports:
