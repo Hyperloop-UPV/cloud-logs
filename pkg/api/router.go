@@ -17,6 +17,7 @@ func NewRouter(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL int64) 
 	logs.Use(AuthMiddleware(jwtSecret))
 	logs.GET("/list", h.ListLogs)
 	logs.GET("/download/:id", h.DownloadLogByID)
+	logs.DELETE("/delete/:id", h.DeleteLogByID)
 	logs.POST("/upload", h.UploadLog)
 
 

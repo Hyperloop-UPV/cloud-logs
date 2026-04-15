@@ -6,6 +6,7 @@ Light Go + Gin backend that:
 - lists uploaded archives
 - uploads compressed log archives
 - downloads compressed log archives by id
+- deletes compressed log archives by id
 
 Storage is SQLite.
 
@@ -98,5 +99,15 @@ Example:
 
 ```bash
 curl -OJ http://127.0.0.1:8080/logs/download/1 \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### DELETE `/logs/delete/:id`
+Downloads archive binary by id.
+
+Example:
+
+```bash
+curl -OJ http://127.0.0.1:8080/logs/delete/1 \
   -H "Authorization: Bearer $TOKEN"
 ```

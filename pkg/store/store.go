@@ -116,3 +116,21 @@ func ListUploadedArchives(db *sql.DB) ([]UploadedArchive, error) {
 	}
 	return out, nil
 }
+
+func DeleteArchiveByID(db *sql.DB, id int64) (bool, error) {
+	res, err := db.Exec(`
+		DELETE FROM uploaded_archives
+		WHERE id = ?
+	`, id)
+
+	if err != nil {
+		return false, fmt.Errorf("delete uploaded archive: %w", err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("rows affected: %w", err)
+	}
+
+	return n > 0, nil
+}

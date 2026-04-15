@@ -27,7 +27,7 @@ type LoginRequest struct {
 
 func NewHandler(db *sql.DB, passwordHash string, jwtSecret string, jwtTTL time.Duration) *Handler {
 	return &Handler{
-		db: db, 
+		db: db,
 		passwordHash: passwordHash,
 		jwtSecret: jwtSecret,
 		jwtTTL: jwtTTL,
@@ -53,7 +53,7 @@ func (h *Handler) Login(c *gin.Context) {
 		})
 		return
 	}
-
+	
 
 	//fmt.Printf("login input received: %s\n", req.Password)
 
@@ -169,5 +169,38 @@ func (h *Handler) ListLogs(c *gin.Context) {
 	WriteJSON(c, http.StatusOK, gin.H{
 		"count": len(logs),
 		"logs":  logs,
+	})
+}
+
+func (h *Handler) DeleteLogByID(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := strconv.ParseInt(idParam, 10, 64)
+	if err != nil || id <= 0 {
+		WriteJSON(c, http.StatusBadRequest, gin.H{
+			"error":   "invalid_request",
+			"message": "invalid archive id",
+		})
+		return
+	}
+
+	deleted, err := store.DeleteArchiveByID(h.db, id)
+	if err != nil {
+		WriteJSON(c, http.StatusInternalServerError, gin.H{
+			"error": "failed to delete archive",
+		})
+		return
+	}
+
+	if !deleted {
+		WriteJSON(c, http.StatusNotFound, gin.H{
+			"error":   "not_found",
+			"message": "archive not found",
+		})
+		return
+	}
+
+	WriteJSON(c, http.StatusOK, gin.H{
+		"status": "deleted",
+		"id":     id,
 	})
 }
