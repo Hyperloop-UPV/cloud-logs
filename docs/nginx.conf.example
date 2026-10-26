@@ -1,0 +1,75 @@
+# Example Nginx Reverse Proxy Configuration for Cloud-Logs API
+# Place in /etc/nginx/sites-available/cloud-logs and symlink to /etc/nginx/sites-enabled/
+
+upstream cloud_logs_upstream {
+    server 127.0.0.1:8000;
+    keepalive 32;
+}
+
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name logs.hyperloopupv.com;  # Replace with your actual domain
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS Server Block
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name logs.hyperloopupv.com;  # Replace with your actual domain
+
+    # SSL Certificates (managed by Certbot / Let's Encrypt)
+    # ssl_certificate /etc/letsencrypt/live/logs.hyperloopupv.com/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/logs.hyperloopupv.com/privkey.pem;
+
+    # Modern SSL configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    # Security Headers
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Large telemetry zip uploads (adjust to match maximum expected flight log package)
+    client_max_body_size 500M;
+    client_body_buffer_size 1M;
+
+    # Timeouts for large uploads / long-polling
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+
+    location / {
+        proxy_pass http://cloud_logs_upstream;
+        proxy_http_version 1.1;
+
+        # Forwarded identity headers (critical for FastAPI OAuth callbacks and client IP logging)
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $server_port;
+
+        # Keepalive upstream connection
+        proxy_set_header Connection "";
+
+        # Disable buffering for streaming responses and large chunked uploads
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+}

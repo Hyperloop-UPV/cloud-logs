@@ -1,9 +1,42 @@
+# Git and version control
 .git
 .gitignore
-.env
-cloud-logs
+
+# Python virtual environment and caches
+.venv
+venv
+**/__pycache__
+*.py[cod]
+*.pyo
+
+# Testing and coverage
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+tests
+
+# Local SQLite databases and host volumes
+data
+credentials
 *.db
 *.db-journal
-tmp
-uploads
-*csv
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Local secrets and env files
+.env
+.env.*
+!.env.example
+service_account*.json
+*.pem
+*.key
+
+# IDE and documentation caches
+.vscode
+.idea
+docs
+AISLOP
