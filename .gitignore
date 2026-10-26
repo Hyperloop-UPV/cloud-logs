@@ -1,12 +1,36 @@
-# Ignore environment variables
+# Environment variables
 .env
+.env.*
+!.env.example
+service_account.json
 
-# Binaries
-cloud-logs
+# Python & Virtual Environments
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
 
-# Persistent data
-cloud-logs.db
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+
+# SQLite databases & persistent volume directories
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/*
+!data/.gitkeep
+credentials/*
+!credentials/.gitkeep
+service_account.json
+service_account*.json
 
 # Other
-*csv
-*zip
+AISLOP/
+process/
