@@ -3,15 +3,45 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: cloud-logs:latest
-    container_name: cloud-logs
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
-    volumes:
-      - cloud_logs_data:/data
+    image: hyperloop-cloud-logs:latest
+    container_name: cloud_logs_api
     restart: unless-stopped
-
-volumes:
-  cloud_logs_data:
+    ports:
+      - "${HOST_BIND_IP:-127.0.0.1}:${CLOUD_LOGS_PORT:-8000}:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/cloud_logs.db}
+      - GDRIVE_ROOT_FOLDER_ID=${GDRIVE_ROOT_FOLDER_ID:-}
+      - GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json
+      - GDRIVE_SIMULATION_MODE=${GDRIVE_SIMULATION_MODE:-false}
+      - MASTER_API_KEY=${MASTER_API_KEY:-}
+      - MASTER_API_KEY_HASH=${MASTER_API_KEY_HASH:-}
+      - JWT_SECRET=${JWT_SECRET:-supersecret_change_in_production_32b}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-90}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI:-http://localhost:8000/api/v1/auth/github/callback}
+      - GITHUB_ORG_NAME=${GITHUB_ORG_NAME:-${GITHUB_ORG_WHITELIST:-Hyperloop-UPV}}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      - CLEANUP_ENABLED=${CLEANUP_ENABLED:-true}
+      - CLEANUP_RETENTION_DAYS=${CLEANUP_RETENTION_DAYS:-30}
+      - CLEANUP_INTERVAL_HOURS=${CLEANUP_INTERVAL_HOURS:-168}
+    volumes:
+      # Persistent SQLite database directory on VPS host
+      - ./data:/app/data
+      # Google Drive service account credentials file
+      - ./credentials:/app/credentials:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
