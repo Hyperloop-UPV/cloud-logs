@@ -1,26 +1,43 @@
-# Build stage
-FROM golang:1.24-alpine AS builder
+# Production Dockerfile for Cloud-Logs API
+FROM python:3.13-slim
+
+# Optimize Python execution in containers
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PORT=8000 \
+    DATABASE_URL=sqlite+aiosqlite:////app/data/cloud_logs.db
+
+# Install curl for container health checks
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set up application directory and unprivileged system user
 WORKDIR /app
 
-RUN apk add --no-cache gcc musl-dev
+RUN groupadd -g 1000 logsuser && \
+    useradd -u 1000 -g logsuser -s /usr/sbin/nologin -M logsuser && \
+    mkdir -p /app/data /app/credentials && \
+    chown -R logsuser:logsuser /app
 
-COPY go.mod go.sum ./
-RUN go mod download
+# Install dependencies first for Docker layer caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -o cloud-logs .
+# Copy application source code
+COPY --chown=logsuser:logsuser app/ ./app/
 
-# Runtime stage
-FROM alpine:3.20
-WORKDIR /app
+# Switch to non-root user
+USER logsuser
 
-RUN apk add --no-cache ca-certificates sqlite
+# Expose HTTP port
+EXPOSE 8000
 
-COPY --from=builder /app/cloud-logs /app/cloud-logs
+# Container healthcheck against /health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
 
-# App data dir for sqlite file persistence
-RUN mkdir -p /data
-ENV DATABASE_PATH=/data/cloud-logs.db
-
-EXPOSE 8080
-CMD ["/app/cloud-logs"]
+# Start Uvicorn ASGI server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
