@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-paper: #fbfbf9;
+  --color-panel: #ffffff;
+  --color-ink: #121821;
+  --color-ink-soft: #5a6472;
+  --color-ink-faint: #8b939e;
+  --color-rule: #dfe2dc;
+  --color-rule-soft: #ebede8;
+  --color-accent: #0c6b70;
+  --color-accent-weak: #e7f1f1;
+  --color-st-ready: #1f7a4c;
+  --color-st-pending: #b45309;
+  --color-st-failed: #b42318;
+  --color-st-aborted: #76808d;
+
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-cond: 'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-cond);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+  }
+  /* Dígitos alineados en todo lo que sea dato */
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Superficie de hoja cuadriculada: solo en vacíos y zona de subida */
+.worksheet {
+  background-image:
+    linear-gradient(to right, rgba(18, 24, 33, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(18, 24, 33, 0.05) 1px, transparent 1px);
+  background-size: 9px 9px;
+}
