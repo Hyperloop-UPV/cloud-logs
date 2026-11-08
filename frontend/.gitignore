@@ -1,5 +1,7 @@
-# Logs
-logs
+# Logs. El patron va anclado a la raiz: un `logs` suelto casa con cualquier
+# carpeta llamada logs a cualquier profundidad, incluido codigo fuente, y
+# Tailwind (que respeta .gitignore) deja de escanearla.
+/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
