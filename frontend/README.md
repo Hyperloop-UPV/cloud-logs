@@ -171,9 +171,87 @@ app and are not obvious from the screens:
 
 ## Deployment
 
-`npm run build` emits a static bundle into `dist/`.
+`npm run build` emits a static bundle into `dist/`, roughly 1 MB in total. It is
+already split by route: only the catalog ships in the main chunk, and the
+dashboard (uPlot) and the graph (`react-force-graph`, ~210 kB) download when
+someone visits them.
 
-**Nothing serves it yet.** The backend mounts no static files, and
-`docs/nginx.conf.example` proxies every path to the API. Putting this online
-needs an nginx server block that serves `dist/` with an SPA fallback and proxies
-only `/api` upstream — infrastructure that is not part of this folder.
+```bash
+nvm use                 # Node 24, as pinned in .nvmrc
+npm ci
+npm run check           # format, lint and build — what has to pass before shipping
+```
+
+### It must be served from the same origin as the API
+
+This is not a preference. `src/api/client.ts` calls `/api/v1/...` as a relative
+path, and the refresh token lives in an `HttpOnly` cookie scoped to
+`/api/v1/auth`. Serve the app from a different origin and the cookie stops
+travelling, which means every reload throws the user back to sign-in. There is
+deliberately no `VITE_API_BASE_URL`: it would make a broken setup easy to
+configure.
+
+Everything in `dist/index.html` is referenced from the root (`/assets/…`,
+`/favicon.svg`), so the app has to be served at the domain root, not under a
+subpath. Serving it elsewhere needs `base` in `vite.config.ts`.
+
+### Serving it from FastAPI
+
+The chosen option. **This is a backend change and is not applied here** — the
+frontend is ready for it; the snippet below is for whoever owns `app/`.
+
+It goes at the very end of `app/main.py`, after
+`app.include_router(api_router, prefix="/api/v1")`. Order matters: routes
+declared earlier win, so the catch-all cannot swallow `/api/v1/*`, `/docs`,
+`/redoc`, `/openapi.json` or `/health`.
+
+```python
+from pathlib import Path
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+if FRONTEND_DIST.is_dir():
+    # Hashed filenames, so they can be cached hard.
+    app.mount(
+        "/assets",
+        StaticFiles(directory=FRONTEND_DIST / "assets"),
+        name="assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa(full_path: str) -> FileResponse:
+        """Serve index.html for client-side routes (/catalog, /graph, …)."""
+        candidate = FRONTEND_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")
+```
+
+Three things to decide while applying it:
+
+- **`GET /` is already taken** by the service-identity endpoint
+  (`app/main.py:128`), and a declared route wins over the catch-all. Visiting the
+  domain root would return that JSON instead of the app. Either remove it, or
+  move it to something like `/api`.
+- **`index.html` must not be cached**, or people keep running an old build after
+  a deploy. The files under `/assets` carry a content hash in the name and can be
+  cached forever. The snippet sets no cache headers; add them where the reverse
+  proxy lives.
+- **The container only copies `app/`.** The root `Dockerfile` would need the
+  built `dist/` inside the image, either by building the frontend in an earlier
+  stage or by copying a prebuilt `dist/`.
+
+### GitHub OAuth in production
+
+The redirect URI points at the app, which once FastAPI serves it is the same
+origin as the API:
+
+```
+GITHUB_REDIRECT_URI=https://<host>/auth/callback
+```
+
+That path has to reach the SPA fallback. It is a client-side route — there is no
+`/auth/callback` endpoint in the API.

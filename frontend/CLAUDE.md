@@ -30,11 +30,16 @@ porqué de cada decisión.
 ## Comandos
 
 ```bash
-npm run dev      # Vite en :5173, con proxy /api -> localhost:8000
-npm run build    # tsc -b && vite build. Debe pasar limpio
-npm run lint     # oxlint
-npx prettier --write src   # ordena también las clases de Tailwind
+npm run dev          # Vite en :5173, con proxy /api -> localhost:8000
+npm run build        # tsc -b && vite build. Debe pasar limpio
+npm run typecheck    # solo tsc, más rápido que un build entero
+npm run lint         # oxlint
+npm run format       # prettier; ordena también las clases de Tailwind
+npm run check        # format:check + lint + build. Lo que tiene que pasar antes de subir
 ```
+
+Node se fija en `.nvmrc` y en `engines` (24), para que otra máquina no produzca
+un bundle distinto en silencio.
 
 Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`.
 
@@ -170,6 +175,12 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   - El chunk de `/graph` pesa ~210 kB por la librería, y `/tags` bajó a ~8 kB al
     separarlos. No importa porque la ruta va con `lazy()`, pero no la importes
     desde el bundle principal.
+- **El tema se aplica dos veces y tiene que ser a propósito.** Un script en línea
+  y bloqueante en `index.html` pone la clase `.dark` antes del primer pintado,
+  porque el módulo que gestiona el tema viaja dentro del bundle y hasta que ese
+  bundle se descarga la página se pintaría en claro: con 378 kB es un destello
+  blanco visible. Ese script **duplica la clave y el criterio** de
+  `hooks/useColorScheme.ts`. Si cambias uno, cambia el otro.
 - **`useColorScheme` guarda su estado en el módulo, no en un `useState`.** El tema
   es una preferencia global y tiene que haber un solo valor lo llamen dos
   componentes o diez. Con un `useState` por llamada —`AppShell`, `DashboardPage` y

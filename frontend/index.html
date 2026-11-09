@@ -4,7 +4,49 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Catalog of telemetry and diagnostic archives from the Hyperloop UPV pod."
+    />
+    <!-- Barra del navegador en movil, con los fondos del kit. -->
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#f9fafb"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#181818"
+    />
     <title>Hyperloop UPV Cloud Logs</title>
+
+    <!--
+      El tema, antes del primer pintado.
+
+      Tiene que ir aqui y ser bloqueante: el modulo que gestiona el tema vive
+      dentro del bundle, y hasta que ese bundle se descarga y ejecuta la pagina
+      se pintaria en claro. Con 378 kB eso es un destello blanco perfectamente
+      visible al entrar en modo oscuro.
+
+      **Duplica a proposito la logica de src/hooks/useColorScheme.ts**: la clave
+      de almacenamiento y el criterio (lo guardado manda; si no hay nada, lo que
+      diga el sistema) tienen que coincidir con las de alli. Si cambias una,
+      cambia la otra o el destello vuelve, ahora al reves.
+    -->
+    <script>
+      try {
+        var saved = localStorage.getItem("cloud-logs-dark-mode");
+        var dark =
+          saved !== null
+            ? saved === "true"
+            : matchMedia("(prefers-color-scheme: dark)").matches;
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {
+        // Pestaña privada o almacenamiento bloqueado: se pinta en claro y el
+        // bundle lo corrige al cargar. Un fallo aqui no puede tumbar la pagina.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
