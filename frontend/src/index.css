@@ -1,4 +1,4 @@
-@import '@hyperloopupv/frontend-kit/globals.css';
+@import "@hyperloopupv/frontend-kit/globals.css";
 
 /* Las rutas @source del kit se resuelven a través del symlink de node_modules y no
    alcanzan este árbol de fuentes. Sin esta línea Tailwind no genera ninguna clase

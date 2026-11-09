@@ -9,17 +9,23 @@ SPA de React 19 + Vite + TS que consume el API de `cloud-logs`. Se construye sob
 `@hyperloopupv/frontend-kit` y sigue el lenguaje de diseño de los frontends del equipo
 (`../../soft-front/frontend`).
 
-Seis pantallas, todas vivas (`src/constants/pages.ts`, salvo About que vive en el
-pie del raíl):
+Ocho pantallas, todas vivas (`src/constants/pages.ts`, salvo About, que vive en el
+pie del raíl, y la de acceso, que no se navega):
 
 | Ruta | Qué es |
 | --- | --- |
 | `/` | Dashboard: métricas, volumen mensual con uPlot, reparto por estado, tags y actividad reciente. Todo enlaza al catálogo con el filtro puesto |
 | `/catalog` | Tabla con filtros, orden y paginación. Pinchar una fila abre la ficha (`?log=<uuid>`), editable. Selección múltiple con etiquetado en lote, búsquedas guardadas, columnas y densidad configurables, export a CSV |
-| `/tags` | Las etiquetas en tres modos (`?view=cards\|table\|graph`): tarjetas, tabla ordenable y tarjetas o tabla (el grafo tiene pantalla propia) |
+| `/tags` | Las etiquetas en dos modos (`?view=cards\|table`): tarjetas de colección y tabla ordenable. `?view=graph` redirige a `/graph` |
+| `/graph` | El grafo del archivo: un nodo por log y uno por etiqueta, con pantalla completa |
 | `/upload` | Subida en dos fases directa a Drive, con cola, progreso y cancelación |
 | `/team` | Usuarios y roles, más el `cleanup` con previsualización. Solo admin |
-| `/about` | Quién la ha hecho, la pila y el estado del servicio |
+| `/about` | Quién la ha hecho, la pila, el repositorio y el estado del servicio |
+| `/signin` | OAuth de GitHub y clave maestra, con las trazas de fondo y el estado del API |
+
+El `README.md` de al lado es la puerta de entrada para personas: puesta en marcha,
+comandos, estructura y despliegue. Este fichero es el complemento: las trampas y el
+porqué de cada decisión.
 
 ## Comandos
 
@@ -82,7 +88,7 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   no una simulación propia: lo que hace buena a esta vista es la interacción
   —arrastrar, hacer zoom, desplazarse— y eso es justo lo que se rompe al
   reimplementarlo. Hubo un `tagGraphLayout.ts` hecho a mano; se retiró. Tres cosas
-  que hay que respetar en `features/tags/TagGraph.tsx`:
+  que hay que respetar en `features/graph/GraphCanvas.tsx`:
   - **`graphData` tiene que ser referencialmente estable.** La librería guarda la
     posición y la velocidad *dentro* de los objetos de nodo; si recibe un objeto
     nuevo en cada render, reinicia la simulación y el grafo tiembla. Va en un
@@ -161,8 +167,9 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   - Las aristas van **más gordas de lo que pide la legibilidad estricta** (1,2 px,
     2,6 px al resaltar): con los nodos pequeños, las líneas son lo que da cuerpo
     al dibujo.
-  - El chunk de `/tags` pesa ~215 kB por la librería. No importa porque la ruta va
-    con `lazy()`, pero no la importes desde el bundle principal.
+  - El chunk de `/graph` pesa ~210 kB por la librería, y `/tags` bajó a ~8 kB al
+    separarlos. No importa porque la ruta va con `lazy()`, pero no la importes
+    desde el bundle principal.
 - **La pantalla de acceso lleva trazas de fondo que NO son datos.** La geometría
   vive en `routes/signInTrace.ts`, puro y sin DOM para poder verificarlo en Node.
   Se lee como ambiente porque **no tiene ejes, ni valores, ni rejilla, ni leyenda**,
