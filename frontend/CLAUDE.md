@@ -170,6 +170,20 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   - El chunk de `/graph` pesa ~210 kB por la librería, y `/tags` bajó a ~8 kB al
     separarlos. No importa porque la ruta va con `lazy()`, pero no la importes
     desde el bundle principal.
+- **`useColorScheme` guarda su estado en el módulo, no en un `useState`.** El tema
+  es una preferencia global y tiene que haber un solo valor lo llamen dos
+  componentes o diez. Con un `useState` por llamada —`AppShell`, `DashboardPage` y
+  la pantalla de acceso llaman los tres— conmutar desde el raíl cambiaba el estado
+  de `AppShell` y el del dashboard se quedaba con el viejo; su gráfica, que se
+  reconstruye con `isDark` entre las dependencias, seguía pintada con los colores
+  del tema anterior. Ahora es un almacén de módulo con `useSyncExternalStore`.
+- **La clase `.dark` se aplica en el setter, no en un efecto.** Es lo que elimina
+  el problema de orden en lugar de esquivarlo: los efectos de los hijos corren
+  antes que los de los padres, así que con un efecto quien leyera las variables CSS
+  al reaccionar al cambio —`MonthlyVolumeChart` con `readThemeColors()`— las leería
+  del tema anterior. Haciéndolo en la acción, el DOM ya está al día antes de que
+  nada vuelva a renderizar. De paso la clase queda puesta al cargar el módulo, así
+  que desaparece el destello del tema contrario en el primer pintado.
 - **La pantalla de acceso lleva trazas de fondo que NO son datos.** La geometría
   vive en `routes/signInTrace.ts`, puro y sin DOM para poder verificarlo en Node.
   Se lee como ambiente porque **no tiene ejes, ni valores, ni rejilla, ni leyenda**,
