@@ -72,6 +72,8 @@ export function UploadPage() {
         void queryClient.invalidateQueries({ queryKey: ["logs"] });
         void queryClient.invalidateQueries({ queryKey: ["logStats"] });
         void queryClient.invalidateQueries({ queryKey: ["logTags"] });
+        // El log recien subido tiene que aparecer en /tags y en el grafo.
+        void queryClient.invalidateQueries({ queryKey: ["tagAggregate"] });
       },
     );
   };

@@ -59,6 +59,8 @@ function MaintenancePanel() {
       setPreview(null);
       void queryClient.invalidateQueries({ queryKey: ["logs"] });
       void queryClient.invalidateQueries({ queryKey: ["logStats"] });
+      // El cleanup borra logs pending_upload, que el agregado si cuenta.
+      void queryClient.invalidateQueries({ queryKey: ["tagAggregate"] });
     },
     onError: (err: unknown) => {
       setPreview(null);

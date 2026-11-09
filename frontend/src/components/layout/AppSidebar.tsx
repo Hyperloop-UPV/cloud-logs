@@ -28,7 +28,7 @@ import {
   useSidebar,
 } from "@hyperloopupv/frontend-kit/components";
 import { SunMoon } from "@hyperloopupv/frontend-kit/icons";
-import { Bookmark, CircleUser, Keyboard, KeyRound } from "lucide-react";
+import { Bookmark, CircleUser, Info, Keyboard, KeyRound } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/useAuth";
 import { PAGES_ARRAY, SECTIONS } from "../../constants/pages";
@@ -148,6 +148,18 @@ export function AppSidebar({
           />
         )}
         <SidebarMenu className="relative">
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              tooltip="About Cloud Logs"
+              isActive={pathname === "/about"}
+              asChild
+            >
+              <Link to="/about">
+                <Info className="size-4" />
+                <span>About</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
               tooltip="Keyboard shortcuts  ( ? )"

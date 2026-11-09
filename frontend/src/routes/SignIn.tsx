@@ -4,20 +4,65 @@
 // jerarquia va de lo general a lo concreto: primero de quien es la herramienta
 // (Hyperloop UPV), luego que herramienta es (Cloud Logs), y por ultimo la accion.
 //
-// El icono de Hyperloop UPV Software queda de marca de agua al fondo, como en el
-// selector de modo del Electron: presente, pero sin disputarle atencion al boton.
+// Al fondo van las trazas de TelemetryTrace. **No son datos**: son una forma de
+// onda sintetica, sin ejes ni valores ni rejilla, con un claro en el centro para
+// que el texto no pierda contraste. Ver signInTrace.ts.
+//
+// Dos cosas que esta pantalla tiene y el resto de la aplicacion da por hechas,
+// porque aqui el rail no existe: el conmutador de tema y el estado del API. Lo
+// segundo importa de verdad en una herramienta interna — sin ello solo descubres
+// que el backend esta caido despues de ir a GitHub y volver para nada.
 
 import { Button, Input } from "@hyperloopupv/frontend-kit/components";
+import { SunMoon } from "@hyperloopupv/frontend-kit/icons";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ApiError } from "../api/client";
 import { Navigate, useLocation } from "react-router-dom";
+import { ApiError } from "../api/client";
+import { getHealth } from "../api/endpoints";
 import { useAuth } from "../auth/useAuth";
 import { GithubMark } from "../components/brand/GithubMark";
 import { SoftwareMark } from "../components/brand/SoftwareMark";
 import { TeamLogo } from "../components/brand/TeamLogo";
+import { useColorScheme } from "../hooks/useColorScheme";
+import { TelemetryTrace } from "./TelemetryTrace";
+
+/** Cada cuanto se vuelve a preguntar por el API, en ms. */
+const HEALTH_POLL = 20_000;
+
+/** Punto y texto del estado del servicio, con el patron que ya usa About. */
+function ServiceStatus() {
+  const health = useQuery({
+    queryKey: ["health"],
+    queryFn: getHealth,
+    refetchInterval: HEALTH_POLL,
+    // Que un backend que acaba de arrancar se note sin recargar la pagina.
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+
+  const [dot, text] = health.isPending
+    ? ["bg-muted-foreground/40 animate-pulse", "Checking the archive…"]
+    : health.isError
+      ? ["bg-red-500", "Archive unreachable — is the API running?"]
+      : health.data?.status === "healthy"
+        ? ["bg-emerald-500", "Archive reachable"]
+        : [
+            "bg-amber-500",
+            `Archive degraded — database ${health.data?.components.database ?? "unknown"}`,
+          ];
+
+  return (
+    <p className="text-muted-foreground flex items-center gap-2 text-[11px]">
+      <span className={`size-1.5 shrink-0 rounded-full ${dot}`} aria-hidden />
+      {text}
+    </p>
+  );
+}
 
 export function SignIn() {
   const { signIn, signInWithMasterKey, status } = useAuth();
+  const { isDark, toggle } = useColorScheme();
   const location = useLocation();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,6 +115,8 @@ export function SignIn() {
     setBusy(true);
     setError(null);
     try {
+      // Esto es una redireccion completa: la pagina se va. Por eso no se apaga
+      // `busy` al salir bien — el estado "Opening GitHub…" es el final.
       await signIn();
     } catch (err) {
       setBusy(false);
@@ -83,27 +130,40 @@ export function SignIn() {
 
   return (
     <main className="relative flex h-full w-full items-center justify-center overflow-hidden px-6">
-      <SoftwareMark
-        className="pointer-events-none absolute bottom-[-6rem] left-1/2 w-[30rem] -translate-x-1/2 opacity-[0.04]"
-        alt=""
-      />
+      <TelemetryTrace />
 
-      <div className="relative w-full max-w-[24rem]">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={isDark ? "Enable light mode" : "Enable dark mode"}
+        title={isDark ? "Enable light mode" : "Enable dark mode"}
+        className="text-muted-foreground hover:text-foreground hover:bg-muted/60 absolute top-4 right-4 z-10 rounded-md p-2 transition-colors"
+      >
+        <SunMoon className="size-4" />
+      </button>
+
+      <div className="relative w-full max-w-[25rem]">
         <div className="flex items-center gap-2.5">
-          <TeamLogo size={32} />
-          <span className="text-sm font-semibold tracking-wider uppercase">
+          <TeamLogo size={30} />
+          <span className="text-[11px] font-semibold tracking-[0.18em] uppercase">
             Hyperloop UPV
           </span>
         </div>
 
-        <h1 className="mt-5 text-3xl font-bold tracking-tight">Cloud Logs</h1>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Telemetry archive for the pod. Sign in with the GitHub account that
+        <h1 className="mt-6 text-5xl font-bold tracking-tight">Cloud Logs</h1>
+
+        {/* La regla corta, no a todo lo ancho: ata el titulo con lo que viene
+            debajo en lugar de separarlos. */}
+        <div className="bg-primary mt-4 h-[3px] w-10 rounded-full" />
+
+        <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
+          Every run that leaves the test bench is registered here with its time
+          window, its tags and its author. Sign in with the GitHub account that
           belongs to the organisation.
         </p>
 
         <Button
-          className="mt-7 w-full gap-2"
+          className="mt-8 h-10 w-full gap-2"
           onClick={() => void start()}
           disabled={busy}
         >
@@ -172,18 +232,27 @@ export function SignIn() {
               setKeyOpen(true);
               setError(null);
             }}
-            className="text-muted-foreground hover:text-foreground mt-4 text-[11px] underline underline-offset-2"
+            className="text-muted-foreground hover:text-foreground mt-3 text-[11px] underline underline-offset-2"
           >
             Use a master key instead
           </button>
         )}
 
-        {error && <p className="text-destructive mt-3 text-xs">{error}</p>}
+        {/* Un bloque con borde, no una linea suelta: esto impide entrar y tiene
+            que verse. */}
+        {error && (
+          <p className="border-destructive/30 bg-destructive/10 text-destructive mt-4 rounded-md border px-3 py-2 text-xs">
+            {error}
+          </p>
+        )}
 
-        <p className="text-muted-foreground/70 mt-10 flex items-center gap-2 text-[11px]">
-          <SoftwareMark className="size-4 shrink-0 opacity-60" alt="" />
-          Built by Hyperloop UPV Software H12
-        </p>
+        <div className="mt-10 flex flex-col gap-2 border-t pt-4">
+          <ServiceStatus />
+          <p className="text-muted-foreground/70 flex items-center gap-2 text-[11px]">
+            <SoftwareMark className="size-4 shrink-0 opacity-60" alt="" />
+            Built by Hyperloop UPV Software H12
+          </p>
+        </div>
       </div>
     </main>
   );

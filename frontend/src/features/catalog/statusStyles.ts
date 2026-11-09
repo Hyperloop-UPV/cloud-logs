@@ -25,6 +25,14 @@ interface StatusStyle {
   badgeClass: string;
   /** Barra solida del borde izquierdo de la fila y punto. */
   markClass: string;
+  /**
+   * El mismo color, en crudo, para pintar en canvas.
+   *
+   * El grafo dibuja en canvas y alli una clase de Tailwind no sirve de nada. Va
+   * aqui, al lado de markClass, para que las dos representaciones del mismo
+   * estado no se separen: si cambia una, salta a la vista que falta la otra.
+   */
+  canvasColor: string;
 }
 
 export const statusStyles: Record<LogStatus, StatusStyle> = {
@@ -35,6 +43,7 @@ export const statusStyles: Record<LogStatus, StatusStyle> = {
     badgeClass:
       "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
     markClass: "bg-emerald-500",
+    canvasColor: "#10b981",
   },
   pending_upload: {
     label: "Pending",
@@ -43,6 +52,7 @@ export const statusStyles: Record<LogStatus, StatusStyle> = {
     badgeClass:
       "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
     markClass: "bg-amber-500",
+    canvasColor: "#f59e0b",
   },
   failed: {
     label: "Failed",
@@ -51,6 +61,7 @@ export const statusStyles: Record<LogStatus, StatusStyle> = {
     badgeClass:
       "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
     markClass: "bg-red-500",
+    canvasColor: "#ef4444",
   },
   aborted: {
     label: "Aborted",
@@ -59,6 +70,7 @@ export const statusStyles: Record<LogStatus, StatusStyle> = {
     badgeClass:
       "border-zinc-500/30 bg-zinc-500/10 text-zinc-600 dark:text-zinc-400",
     markClass: "bg-zinc-500",
+    canvasColor: "#71717a",
   },
 };
 
@@ -80,6 +92,7 @@ const FALLBACK: StatusStyle = {
   badgeClass:
     "border-dashed border-slate-500/40 bg-slate-500/10 text-slate-600 dark:text-slate-400",
   markClass: "bg-slate-400",
+  canvasColor: "#94a3b8",
 };
 
 export function statusStyle(status: string): StatusStyle {

@@ -9,14 +9,17 @@ SPA de React 19 + Vite + TS que consume el API de `cloud-logs`. Se construye sob
 `@hyperloopupv/frontend-kit` y sigue el lenguaje de diseño de los frontends del equipo
 (`../../soft-front/frontend`).
 
-Cuatro pantallas, todas vivas (`src/constants/pages.ts`):
+Seis pantallas, todas vivas (`src/constants/pages.ts`, salvo About que vive en el
+pie del raíl):
 
 | Ruta | Qué es |
 | --- | --- |
 | `/` | Dashboard: métricas, volumen mensual con uPlot, reparto por estado, tags y actividad reciente. Todo enlaza al catálogo con el filtro puesto |
 | `/catalog` | Tabla con filtros, orden y paginación. Pinchar una fila abre la ficha (`?log=<uuid>`), editable. Selección múltiple con etiquetado en lote, búsquedas guardadas, columnas y densidad configurables, export a CSV |
+| `/tags` | Las etiquetas en tres modos (`?view=cards\|table\|graph`): tarjetas, tabla ordenable y tarjetas o tabla (el grafo tiene pantalla propia) |
 | `/upload` | Subida en dos fases directa a Drive, con cola, progreso y cancelación |
 | `/team` | Usuarios y roles, más el `cleanup` con previsualización. Solo admin |
+| `/about` | Quién la ha hecho, la pila y el estado del servicio |
 
 ## Comandos
 
@@ -68,6 +71,136 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   fichero con los acentos bien.
 - **`PlainHeader` acepta hijos** además de `label`, que es como la cabecera lleva la
   casilla de «seleccionar todo» sin duplicar el componente.
+- **El API no agrega por etiqueta.** `/logs/tags` devuelve solo nombres y
+  `stats.topTags` son los diez primeros con el número de logs y nada más. Todo lo
+  que enseña `/tags` —bytes, fechas, reparto por estado, co-ocurrencia— lo calcula
+  `features/tags/useTagAggregate.ts` paginando `/logs` (tope `pageSize=100`). Está
+  **acotado a 20 páginas** y, si corta, la pantalla lo dice: enseñar cifras
+  parciales como si fueran el total es mentir sobre el archivo. Si algún día se
+  añade un `GET /logs/tags/stats`, este hook es lo que hay que sustituir.
+- **El grafo de etiquetas usa `react-force-graph-2d`** (d3-force sobre canvas),
+  no una simulación propia: lo que hace buena a esta vista es la interacción
+  —arrastrar, hacer zoom, desplazarse— y eso es justo lo que se rompe al
+  reimplementarlo. Hubo un `tagGraphLayout.ts` hecho a mano; se retiró. Tres cosas
+  que hay que respetar en `features/tags/TagGraph.tsx`:
+  - **`graphData` tiene que ser referencialmente estable.** La librería guarda la
+    posición y la velocidad *dentro* de los objetos de nodo; si recibe un objeto
+    nuevo en cada render, reinicia la simulación y el grafo tiembla. Va en un
+    `useMemo` que depende solo de los datos.
+  - **El canvas no hereda CSS** (la misma trampa que uPlot). Los colores salen de
+    `readThemeColors()`, y se releen con un **`MutationObserver` sobre la clase de
+    `documentElement`**, no con un prop `isDark`: la clase `.dark` la pone un efecto
+    de un componente antecesor y **los efectos de los hijos corren antes que los de
+    los padres**, así que mirando el prop se leerían los colores del tema anterior.
+  - **El texto se pinta dividiendo por la escala** en `nodeCanvasObject`; si no,
+    las etiquetas crecen como globos al acercar el zoom.
+  - **El grafo es su propia pantalla** (`/graph`, `features/graph/`), no un modo de
+    `/tags`. Comparte `useTagAggregate` con ella a proposito: misma clave de
+    react-query, así que saltar entre las dos **no vuelve a barrer el catálogo**.
+    Por eso el hook se queda en `features/tags/` y `GraphPage` lo importa de ahí.
+  - `/tags?view=graph` **redirige a `/graph`**: el grafo fue un modo de esa
+    pantalla antes de tener la suya, y los enlaces y marcadores viejos no deben
+    caer en las tarjetas sin explicación.
+  - El lienzo se llama `GraphCanvas`, no `TagGraph`: dibuja un nodo por log
+    también, y el nombre viejo describía mal lo que hace.
+  - **La ruta va con `lazy()`.** `react-force-graph` es la dependencia más gorda
+    del proyecto (~210 kB de trozo propio); metida en el bundle de `/tags` hacía
+    que esa pantalla se descargara entera para nada.
+  - **El grafo es bipartito**: un nodo por log y uno por etiqueta, unidos cuando el
+    log la lleva. Nada de aristas log-log: con N logs serían N² líneas.
+  - **El área del nodo es proporcional al tamaño**, no el radio. Se probó una
+    escala logarítmica suponiendo que el rango de tamaños la pediría, y medida
+    contra los datos reales salió peor: apelotonaba el 60% de los logs en el tramo
+    más grande frente al 32% del área. Si los tamaños llegan a abarcar varios
+    órdenes de magnitud, vuelve a medirlo antes de cambiarlo.
+  - **`TAG_MIN_R` tiene que ser mayor que `LOG_MAX_R`.** Si la etiqueta más pequeña
+    puede ser menor que el log más grande, la jerarquía se invierte y un fichero
+    gordo parece un punto de anclaje. Es un invariante, no una preferencia.
+  - Los logs toman el color de su estado (`statusStyles.canvasColor`, el gemelo en
+    crudo de `markClass` porque en canvas una clase de Tailwind no sirve) y las
+    etiquetas van en el naranja de marca.
+  - **Los extremos de una arista se leen SIEMPRE con `endId()`.** d3-force
+    sustituye en el sitio las cadenas `source`/`target` por los objetos de nodo en
+    el primer tick, así que `link.source === id` da falso en cuanto la simulación
+    arranca. Ya costó un fallo: el cálculo del vecindario comparaba en crudo, el
+    conjunto se quedaba con un solo elemento y los vecinos, en vez de resaltarse,
+    caían en la rama de atenuado — **se apagaban**. El síntoma delata el patrón:
+    las aristas se iluminaban (usan `endId()`) y los nodos no.
+  - **Al señalar un nodo, sus vecinos a una arista se tiñen del acento, más
+    claro** (`lighten()`, mezclando hacia blanco y no hacia el fondo: hacia el
+    fondo saldría más claro en el tema claro pero más *oscuro* en el oscuro).
+    Solo los logs: una etiqueta ya va de ese color y aclararla la haría parecer
+    apagada justo al señalarla. El relleno naranja tapa el color de estado, que
+    es información, así que **el estado pasa al borde** en vez de perderse.
+  - `lighten()` **devuelve el color intacto si no lo puede leer.** Las variables
+    del kit son hex, pero un tema podría declarar `oklch()`. Asignar una cadena
+    inválida a `fillStyle` no da error: el canvas se queda con el color anterior
+    sin avisar, y ese fallo sería invisible.
+  - El acento sale de `--primary`, **que no siempre es naranja** — el kit trae un
+    tema rosa (`#db2777`). Nada de escribir el naranja a mano aquí.
+  - **La fluidez es física, no animación.** Estaba congelándose a los 160 ticks y
+    por eso se sentía rígida. Lo que la suelta: `warmupTicks` (arranca ordenado,
+    sin explosión inicial), `d3AlphaDecay` bajo (se enfría despacio, los nodos se
+    deslizan en vez de llegar de un tirón), `d3VelocityDecay` bajo (conservan
+    inercia) y `cooldownTime` generoso. Si tocas `cooldownTicks`, vuelves a
+    congelarlo.
+  - **Pantalla completa** con la Fullscreen API sobre el contenedor. El estado se
+    sincroniza con el evento `fullscreenchange`, no al pulsar el botón: el usuario
+    puede salir con Escape y si no, el botón acabaría mintiendo. `requestFullscreen`
+    puede rechazarse, así que la promesa lleva su `catch`.
+  - El lienzo lleva **relleno en los cuatro lados** (`p-4`). Estuvo en
+    `px-4 pb-4` y quedaba pegado a la cabecera con 16 px en los otros tres: el
+    canal que falta arriba se nota justo porque los demás están.
+  - **El grafo ocupa todo el alto de la sección**, y para eso la cadena de flex
+    tiene que llegar entera: `SidebarInset` (`flex h-full flex-col`) → cabecera
+    `shrink-0` → el contenedor de la vista, que con `?view=graph` pasa a
+    `flex min-h-0 flex-1 flex-col overflow-hidden` en lugar de `overflow-auto` →
+    la raíz del grafo → la caja del lienzo. Si un eslabón pierde `min-h-0` o se
+    queda en alto automático, el lienzo colapsa o desborda. Las otras dos vistas
+    siguen con scroll, que es lo que una lista larga necesita.
+  - Las aristas van **más gordas de lo que pide la legibilidad estricta** (1,2 px,
+    2,6 px al resaltar): con los nodos pequeños, las líneas son lo que da cuerpo
+    al dibujo.
+  - El chunk de `/tags` pesa ~215 kB por la librería. No importa porque la ruta va
+    con `lazy()`, pero no la importes desde el bundle principal.
+- **La pantalla de acceso lleva trazas de fondo que NO son datos.** La geometría
+  vive en `routes/signInTrace.ts`, puro y sin DOM para poder verificarlo en Node.
+  Se lee como ambiente porque **no tiene ejes, ni valores, ni rejilla, ni leyenda**,
+  y sangra por los bordes con un claro en el centro. Si se le añade cualquiera de
+  esas cosas empezará a parecer una lectura real del pod y dejará de ser honesta.
+  Los pesos de los cuatro senos de `waveform()` **suman exactamente 1**, que es lo
+  que acota la salida en `[-1, 1]`; si se tocan hay que mantener esa suma.
+- **Solo un canal de la traza es de marca.** El color saturado significa estado y
+  el naranja se reserva para marca y acción primaria; varias trazas naranjas se
+  leerían como medidas.
+- **`/api/v1/health` es público** (`app/main.py:139`, sin dependencia de auth) y
+  `getHealth()` ya va con `skipAuthRetry`. Por eso el acceso puede decir si el API
+  responde antes de que nadie pulse nada, sin tocar el backend.
+- **Borrar es blando en el backend y el diálogo lo dice.** `DELETE /logs/{id}`
+  solo pone `deleted_at`: la fila se queda en SQLite y **no se toca nada en Google
+  Drive** (`delete_log` no llama a Drive). Las dos frases del diálogo de
+  confirmación se apoyan en eso y están verificadas contra la base de datos; si
+  algún día el backend borra de verdad, hay que reescribirlas.
+- **No hay papelera porque el API no la permite.** Ningún endpoint lee un log
+  borrado —todas las consultas filtran `deleted_at IS NULL`— y no existe
+  restaurar. Lo único que toca esas filas es `POST /logs/cleanup?purgeSoftDeleted=true`,
+  que las destruye. Una papelera necesitaría `POST /logs/{id}/restore` y un
+  `includeDeleted`; es trabajo de backend, no de aquí.
+- **Editar y borrar comparten permiso.** El backend aplica la misma
+  `check_log_modification_permission` a `PATCH` y a `DELETE`, así que
+  `LogDetailSheet` tiene un solo `canModify` y no dos banderas que podrían
+  separarse por error.
+- Un **404 al borrar se trata como éxito**: significa que ya no está, que es el
+  estado que se quería. Dar error ahí dejaría al usuario atascado ante algo que ya
+  se cumplió.
+- Tras borrar hay que invalidar también **`["tagAggregate"]`**, o el log seguirá
+  dibujándose como nodo en `/graph`.
+- **El botón de cerrar del `Sheet` del kit es `absolute top-4 right-4`**, fuera
+  del flujo, y `SheetHeader` lleva `p-4`: el icono ocupa de 16 a 32 px desde el
+  borde, justo encima de los primeros 16 px del contenido de la cabecera. Un
+  elemento alineado a la derecha ahí (el badge de estado de `LogDetailSheet`) se
+  le monta debajo. Se arregla reservándole sitio con `pr-6` en esa fila, no
+  moviendo el botón.
 - **El `SegmentedControl` del kit reparte el ancho a partes iguales**
   (`width: 100/n %`), porque su indicador deslizante se mueve con
   `translateX(100% * i)` y eso solo cuadra si todos los segmentos miden lo mismo.

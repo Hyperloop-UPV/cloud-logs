@@ -98,6 +98,9 @@ export function useBulkTags() {
         void queryClient.invalidateQueries({ queryKey: ["logs"] });
         void queryClient.invalidateQueries({ queryKey: ["logTags"] });
         void queryClient.invalidateQueries({ queryKey: ["logStats"] });
+        // Alimenta /tags y /graph. Sin esto esas dos pantallas siguen contando
+        // las etiquetas de antes del cambio.
+        void queryClient.invalidateQueries({ queryKey: ["tagAggregate"] });
       }
 
       setResult(tally);

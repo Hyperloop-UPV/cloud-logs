@@ -38,6 +38,13 @@ export function readThemeColors(): {
   grid: string;
   axis: string;
   text: string;
+  /** Relleno de un nodo en reposo. */
+  node: string;
+  /** Nodo y aristas resaltados: el naranja de marca. */
+  accent: string;
+  /** Texto principal, para las etiquetas sobre el lienzo. */
+  foreground: string;
+  background: string;
 } {
   const styles = getComputedStyle(document.documentElement);
   const read = (name: string, fallback: string) =>
@@ -46,5 +53,9 @@ export function readThemeColors(): {
     grid: read("--border", "#e4e4e7"),
     axis: read("--border", "#e4e4e7"),
     text: read("--muted-foreground", "#71717a"),
+    node: read("--muted-foreground", "#71717a"),
+    accent: read("--primary", CHART_COLORS[0]),
+    foreground: read("--foreground", "#18181b"),
+    background: read("--background", "#ffffff"),
   };
 }

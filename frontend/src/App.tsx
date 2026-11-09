@@ -28,6 +28,15 @@ const UploadPage = lazy(() =>
 const TeamPage = lazy(() =>
   import("./features/team/TeamPage").then((m) => ({ default: m.TeamPage })),
 );
+const TagsPage = lazy(() =>
+  import("./features/tags/TagsPage").then((m) => ({ default: m.TagsPage })),
+);
+const GraphPage = lazy(() =>
+  import("./features/graph/GraphPage").then((m) => ({ default: m.GraphPage })),
+);
+const AboutPage = lazy(() =>
+  import("./features/about/AboutPage").then((m) => ({ default: m.AboutPage })),
+);
 
 /** Una pagina dentro del shell, con su propia barrera de errores. */
 function Page({
@@ -78,6 +87,22 @@ export default function App() {
         }
       />
       <Route
+        path="/tags"
+        element={
+          <Page title="The tags page failed to render">
+            <TagsPage />
+          </Page>
+        }
+      />
+      <Route
+        path="/graph"
+        element={
+          <Page title="The graph failed to render">
+            <GraphPage />
+          </Page>
+        }
+      />
+      <Route
         path="/upload"
         element={
           <Page title="The upload page failed to render">
@@ -90,6 +115,14 @@ export default function App() {
         element={
           <Page title="The team page failed to render">
             <TeamPage />
+          </Page>
+        }
+      />
+      <Route
+        path="/about"
+        element={
+          <Page title="The about page failed to render">
+            <AboutPage />
           </Page>
         }
       />

@@ -12,6 +12,12 @@
 import {
   Badge,
   Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Separator,
   Sheet,
   SheetContent,
@@ -20,13 +26,17 @@ import {
   SheetTitle,
   Textarea,
 } from "@hyperloopupv/frontend-kit/components";
-import { ExternalLink, FileDown } from "@hyperloopupv/frontend-kit/icons";
+import {
+  ExternalLink,
+  FileDown,
+  Trash2,
+} from "@hyperloopupv/frontend-kit/icons";
 import { cn } from "@hyperloopupv/frontend-kit/lib";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
-import { downloadUrl, getLog, updateLog } from "../../api/endpoints";
+import { deleteLog, downloadUrl, getLog, updateLog } from "../../api/endpoints";
 import type { Log } from "../../api/types";
 import { useAuth } from "../../auth/useAuth";
 import { TagEditor } from "./TagEditor";
@@ -116,11 +126,12 @@ export function LogDetailSheet({
 
   const log = detail.data;
 
-  // El backend deja editar al dueno, al admin y a la master key
-  // (logs.py::check_log_modification_permission). Se replica aqui para no ofrecer
-  // un formulario que va a devolver 403, pero el 403 se maneja igual por si la
-  // comprobacion local y la del servidor no coinciden.
-  const canEdit = Boolean(
+  // El backend aplica la MISMA regla a editar y a borrar: dueño, admin o master
+  // (logs.py::check_log_modification_permission, que usan tanto PATCH como
+  // DELETE). Por eso hay un solo permiso y no dos. Se replica aqui para no
+  // ofrecer acciones que van a devolver 403, pero el 403 se maneja igual por si
+  // la comprobacion local y la del servidor no coinciden.
+  const canModify = Boolean(
     log && (isAdmin || (user && log.createdBy === user.id)),
   );
 
@@ -131,12 +142,16 @@ export function LogDetailSheet({
 
   // Al cambiar de log se recarga el borrador desde el servidor.
   const [loadedId, setLoadedId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   if (log && log.id !== loadedId) {
     setLoadedId(log.id);
     setDraftTags(log.tags);
     setDraftNote(log.note ?? "");
     setDirty(false);
     setSaveError(null);
+    setConfirmDelete(false);
+    setDeleteError(null);
   }
 
   const save = useMutation({
@@ -146,6 +161,8 @@ export function LogDetailSheet({
       queryClient.setQueryData(["log", updated.id], updated);
       void queryClient.invalidateQueries({ queryKey: ["logs"] });
       void queryClient.invalidateQueries({ queryKey: ["logTags"] });
+      // Cambiar las etiquetas de un log cambia el agregado de /tags y /graph.
+      void queryClient.invalidateQueries({ queryKey: ["tagAggregate"] });
       setDirty(false);
       setSaveError(null);
     },
@@ -156,6 +173,39 @@ export function LogDetailSheet({
           : error instanceof Error
             ? error.message
             : "The changes could not be saved.",
+      );
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: () => deleteLog(log!.id),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ["log", log!.id] });
+      void queryClient.invalidateQueries({ queryKey: ["logs"] });
+      void queryClient.invalidateQueries({ queryKey: ["logStats"] });
+      void queryClient.invalidateQueries({ queryKey: ["logTags"] });
+      // La clave que alimentan /tags y /graph. Sin esto el log borrado seguiria
+      // dibujandose como un nodo del grafo.
+      void queryClient.invalidateQueries({ queryKey: ["tagAggregate"] });
+      setConfirmDelete(false);
+      onClose();
+    },
+    onError: (error: unknown) => {
+      // Un 404 significa que ya no esta: el estado que se queria ya se cumple,
+      // asi que se trata como exito en vez de dar un error que no deja hacer nada.
+      if (error instanceof ApiError && error.status === 404) {
+        queryClient.removeQueries({ queryKey: ["log", log!.id] });
+        void queryClient.invalidateQueries({ queryKey: ["logs"] });
+        setConfirmDelete(false);
+        onClose();
+        return;
+      }
+      setDeleteError(
+        error instanceof ApiError && error.status === 403
+          ? "You can only delete logs you uploaded."
+          : error instanceof Error
+            ? error.message
+            : "The log could not be deleted.",
       );
     },
   });
@@ -204,7 +254,11 @@ export function LogDetailSheet({
         ) : (
           <>
             <SheetHeader className="gap-1">
-              <div className="flex items-start gap-2">
+              {/* pr-6 para el boton de cerrar del kit, que es `absolute top-4
+                  right-4` y por tanto no esta en el flujo: sin reservarle sitio
+                  se le monta encima al badge de estado. 16 px de icono mas 8 de
+                  hueco, medidos sobre el sheet.tsx del kit. */}
+              <div className="flex items-start gap-2 pr-6">
                 <span
                   className={cn("mt-1.5 h-4 w-[3px] shrink-0", style.markClass)}
                 />
@@ -338,7 +392,7 @@ export function LogDetailSheet({
                   Tags and note
                 </p>
 
-                {canEdit ? (
+                {canModify ? (
                   <div className="flex flex-col gap-2">
                     <TagEditor
                       value={draftTags}
@@ -435,8 +489,100 @@ export function LogDetailSheet({
                   </section>
                 </>
               )}
+
+              {/* Borrar va al final y aparte, no en la fila de Download: una
+                  accion destructiva pegada al boton primario se pulsa sin
+                  querer. El texto dice el alcance antes de abrir nada — lo que
+                  se borra es la ficha del catalogo, no el ZIP de Drive. */}
+              {canModify && (
+                <>
+                  <Separator />
+                  <section>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDeleteError(null);
+                        setConfirmDelete(true);
+                      }}
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-7 gap-1.5 text-xs"
+                    >
+                      <Trash2 className="size-3.5" />
+                      Delete from catalog
+                    </Button>
+                  </section>
+                </>
+              )}
             </div>
           </>
+        )}
+        {/* La confirmacion dice las dos cosas que no son obvias y que el usuario
+            necesita para decidir: que el ZIP de Drive sigue donde esta
+            (delete_log no llama a Drive, solo marca la fila) y que desde la app
+            no hay vuelta atras, porque el API no expone restaurar.
+
+            Sin pedir que teclee el nombre: la fila no se destruye de verdad
+            —queda con deleted_at puesto— asi que exigir transcripcion seria
+            desproporcionado para lo que realmente pasa. */}
+        {log && (
+          <Dialog
+            open={confirmDelete}
+            onOpenChange={(open) => {
+              if (remove.isPending) return;
+              setConfirmDelete(open);
+              if (!open) setDeleteError(null);
+            }}
+          >
+            <DialogContent className="sm:max-w-[26rem]">
+              <DialogHeader>
+                <DialogTitle className="text-base">
+                  Delete this log from the catalog?
+                </DialogTitle>
+                <DialogDescription asChild>
+                  <div className="space-y-2 text-xs">
+                    <p className="text-foreground font-medium break-all">
+                      {log.fileName}
+                    </p>
+                    <p>
+                      The archive stays in Google Drive — only its catalog entry
+                      is removed. Nobody will be able to find it through this
+                      app.
+                    </p>
+                    <p>
+                      This cannot be undone from here. An administrator can
+                      still recover it from the database.
+                    </p>
+                  </div>
+                </DialogDescription>
+              </DialogHeader>
+
+              {deleteError && (
+                <p className="text-destructive text-xs">{deleteError}</p>
+              )}
+
+              <DialogFooter className="gap-2 sm:gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  disabled={remove.isPending}
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  Keep it
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 gap-1.5 text-xs"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate()}
+                >
+                  <Trash2 className="size-3.5" />
+                  {remove.isPending ? "Deleting…" : "Delete from catalog"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </SheetContent>
     </Sheet>
