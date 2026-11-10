@@ -324,7 +324,7 @@ class TestLogsAPI(TestCase):
         self.assertEqual(data["id"], str(log_id))
         self.assertEqual(data["status"], "aborted")
         self.assertEqual(pending_log.status, "aborted")
-        self.assertIn("User cancelled in GUI", pending_log.note)
+        self.assertIn("User cancelled in GUI", pending_log.note or "")
         self.mock_db.commit.assert_called_once()
 
     def test_abort_upload_already_ready_fails(self):
@@ -643,3 +643,66 @@ class TestLogsAPI(TestCase):
             headers=self.headers,
         )
         self.assertEqual(delete_res.status_code, 204)
+
+    def test_log_out_duration_computation(self):
+        """LogOut computed field duration."""
+        sample_log = self._create_sample_log()
+        sample_log.start_date = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
+        sample_log.end_date = datetime(2026, 10, 23, 10, 5, 30, tzinfo=UTC)
+
+        self.mock_result.scalar_one_or_none.return_value = sample_log
+        res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["duration"], 330.0)
+        self.assertNotIn("durationSeconds", data)
+
+    def test_get_tags_stats_endpoint(self):
+        """GET /api/v1/logs/tags/stats returns rich tag breakdown."""
+        sample_log = self._create_sample_log(tags=["pod", "bms"])
+        sample_log.file_size = 5000
+        self.mock_result.scalars.return_value.all.return_value = [sample_log]
+
+        res = self.client.get("/api/v1/logs/tags/stats", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["totalTags"], 2)
+        self.assertEqual(data["totalSize"], 10000)
+        self.assertEqual(len(data["tags"]), 2)
+        tag_names = {t["tag"] for t in data["tags"]}
+        self.assertIn("pod", tag_names)
+        self.assertIn("bms", tag_names)
+
+    def test_list_tags_detailed(self):
+        """GET /api/v1/logs/tags?detailed=true returns TagsStatsResponse."""
+        sample_log = self._create_sample_log(tags=["pod"])
+        self.mock_result.scalars.return_value.all.return_value = [sample_log]
+
+        res = self.client.get("/api/v1/logs/tags?detailed=true", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("totalTags", data)
+        self.assertIn("tags", data)
+
+    def test_search_logs_metadata_query_allowed_for_regular_user(self):
+        """Searching by client_metadata is allowed for all authenticated users."""
+        self.mock_result.scalar.return_value = 0
+        self.mock_result.scalars.return_value.all.return_value = []
+
+        res = self.client.get("/api/v1/logs?metadataQuery=test_run", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+
+    def test_duration_with_mixed_naive_aware_timezones(self):
+        """Verify duration calculation does not raise TypeError when mixing naive and aware datetimes."""
+        sample_log = self._create_sample_log(status="ready")
+        # start_date is naive, end_date is aware
+        sample_log.start_date = datetime(2026, 10, 23, 10, 0, 0)
+        sample_log.end_date = datetime(2026, 10, 23, 10, 2, 0, tzinfo=UTC)
+
+        self.mock_result.scalar_one_or_none.return_value = sample_log
+        res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["duration"], 120.0)
+        self.assertEqual(sample_log.duration, 120.0)
+

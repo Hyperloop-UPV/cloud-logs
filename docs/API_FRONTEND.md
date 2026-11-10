@@ -108,10 +108,10 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
   - `tags`: Comma-separated list of required tags (e.g., `pod,bms`).
   - `driveFolder`: Filter by monthly folder (e.g., `2026_10`).
   - `status`: Filter by state (`ready`, `pending_upload`, `aborted`, `failed`).
-  - `startDate`: Logs recorded after ISO timestamp (e.g., `2026-10-01T00:00:00Z`).
-  - `endDate`: Logs recorded before ISO timestamp (e.g., `2026-10-31T23:59:59Z`).
+  - `startDate`: Logs recorded/active after ISO timestamp (overlapping interval filter).
+  - `endDate`: Logs recorded/active before ISO timestamp (overlapping interval filter).
   - `creator`: Filter by creator's username (e.g., `john_eng`).
-  - `metadataQuery` *(Admin only)*: Substring search across `clientMetadata`.
+  - `metadataQuery`: Substring search across `clientMetadata` (available to all authenticated users).
 
 **Example URL**:  
 `/api/v1/logs?page=1&pageSize=20&sortBy=fileName&sortOrder=asc&tags=pod,motor&status=ready`
@@ -141,6 +141,7 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
       },
       "startDate": "2026-10-23T10:00:00Z",
       "endDate": "2026-10-23T10:15:00Z",
+      "duration": 900.0,
       "createdBy": "a3b1c2d3-...",
       "creator": "john_eng",
       "createdAt": "2026-10-23T10:00:02Z",
@@ -169,7 +170,7 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
 
 - **Method**: `GET`
 - **Path**: `/api/v1/logs/stats`
-- **When to call**: For rendering overview charts, metric counters, and storage distribution on the main dashboard.
+- **When to call**: For rendering overview charts, metric counters, storage distribution, recent uploads, monthly trends, and tag breakdown on the main dashboard.
 - **Response Payload**:
 ```json
 {
@@ -191,18 +192,68 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
     { "tag": "bms", "count": 22 },
     { "tag": "motor", "count": 18 },
     { "tag": "telemetry", "count": 15 }
+  ],
+  "needsAttention": 6,
+  "uploadsPerMonth": [
+    {
+      "folder": "2026_09",
+      "year": 2026,
+      "month": 9,
+      "label": "Sep 2026",
+      "count": 20,
+      "bytes": 4200000000
+    },
+    {
+      "folder": "2026_10",
+      "year": 2026,
+      "month": 10,
+      "label": "Oct 2026",
+      "count": 28,
+      "bytes": 6285760000
+    }
+  ],
+  "recentUploads": [
+    {
+      "id": "c8b321a0-3841-4cf1-a472-8d76a26d7f01",
+      "fileName": "run_42_telemetry.zip",
+      "status": "ready",
+      "driveFolder": "2026_10",
+      "fileSize": 104857600,
+      "duration": 900.0,
+      "createdAt": "2026-10-23T10:00:02Z"
+    }
+  ],
+  "tagDetails": [
+    {
+      "tag": "pod",
+      "logs": 35,
+      "totalSize": 7340032000,
+      "averageSize": 209715200.0,
+      "statusMix": {
+        "ready": 32,
+        "pending_upload": 2,
+        "aborted": 1
+      },
+      "firstUsed": "2026-09-01T08:00:00Z",
+      "lastUsed": "2026-10-23T10:00:02Z",
+      "usedWith": [
+        { "tag": "bms", "count": 18 },
+        { "tag": "motor", "count": 12 }
+      ]
+    }
   ]
 }
 ```
 
 ---
 
-## 5. Tag Autocompletion
+## 5. Tag Statistics & Autocompletion
 
+### 5.1 Simple Tag List (Autocomplete)
 - **Method**: `GET`
 - **Path**: `/api/v1/logs/tags`
-- **When to call**: For dynamic suggestions in tag inputs or multiselect filters.
-- **Response Payload**:
+- **Optional Query Parameter**: `detailed` (`bool`, default: `false`).
+- **Response Payload (`detailed=false`)**:
 ```json
 [
   "bms",
@@ -213,6 +264,37 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
   "propulsion",
   "telemetry"
 ]
+```
+
+### 5.2 Rich Tag Statistics
+- **Method**: `GET`
+- **Path**: `/api/v1/logs/tags/stats` (or `/api/v1/logs/tags?detailed=true`)
+- **Response Payload**:
+```json
+{
+  "totalTags": 10,
+  "totalSize": 336100000000,
+  "tags": [
+    {
+      "tag": "pcu",
+      "logs": 21,
+      "totalSize": 53700000000,
+      "averageSize": 2557142857.14,
+      "statusMix": {
+        "ready": 19,
+        "pending_upload": 1,
+        "failed": 1
+      },
+      "firstUsed": "2026-11-08T08:00:00Z",
+      "lastUsed": "2026-11-10T06:00:00Z",
+      "usedWith": [
+        { "tag": "debug", "count": 8 },
+        { "tag": "bench", "count": 6 },
+        { "tag": "vcu", "count": 8 }
+      ]
+    }
+  ]
+}
 ```
 
 ---
@@ -336,6 +418,6 @@ Only users with the **`admin`** role or the **Master API Key** can promote or mo
 - `307 Temporary Redirect`: Direct file download redirect to Google Drive.
 - `400 Bad Request`: Invalid parameters, CSRF verification failure, or attempt to abort a completed upload.
 - `401 Unauthorized`: Token missing, expired, or invalid.
-- `403 Forbidden`: Insufficient permissions (e.g., standard `user` attempting role updates, `metadataQuery`, or `cleanup`).
+- `403 Forbidden`: Insufficient permissions (e.g., standard `user` attempting role updates or maintenance `cleanup`).
 - `404 Not Found`: Target UUID does not exist or has been soft-deleted.
 - `422 Unprocessable Content`: Schema validation error for submitted request body or parameters.

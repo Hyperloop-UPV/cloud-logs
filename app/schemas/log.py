@@ -1,10 +1,10 @@
 """Schemas for telemetry and diagnostic logs supporting Google Drive two-phase uploads."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import Field, computed_field, field_validator
 
 from app.schemas.base import CamelModel
 
@@ -114,6 +114,17 @@ class LogOut(CamelModel):
     def ensure_metadata(cls, v: Any) -> dict[str, Any]:
         return v if isinstance(v, dict) else {}
 
+    @computed_field
+    @property
+    def duration(self) -> float | None:
+        """Recording duration in seconds computed from start_date and end_date."""
+        if self.start_date and self.end_date:
+            start = self.start_date if self.start_date.tzinfo is not None else self.start_date.replace(tzinfo=UTC)
+            end = self.end_date if self.end_date.tzinfo is not None else self.end_date.replace(tzinfo=UTC)
+            diff = (end - start).total_seconds()
+            return max(0.0, round(diff, 3))
+        return None
+
 
 class LogSearchResponse(CamelModel):
     """Paginated list of logs."""
@@ -131,6 +142,37 @@ class TagCount(CamelModel):
     count: int
 
 
+class MonthlyUploadStats(CamelModel):
+    folder: str
+    year: int
+    month: int
+    label: str
+    count: int
+    bytes: int = 0
+
+
+class TagCoOccurrence(CamelModel):
+    tag: str
+    count: int
+
+
+class TagDetailOut(CamelModel):
+    tag: str
+    logs: int = Field(..., description="Count of logs with this tag")
+    total_size: int = Field(..., description="Total size in bytes of logs with this tag")
+    average_size: float = Field(..., description="Average log size in bytes for this tag")
+    status_mix: dict[str, int] = Field(default_factory=dict, description="Counts by status for this tag")
+    first_used: datetime | None = None
+    last_used: datetime | None = None
+    used_with: list[TagCoOccurrence] = Field(default_factory=list, description="Top co-occurring tags with counts")
+
+
+class TagsStatsResponse(CamelModel):
+    total_tags: int
+    total_size: int
+    tags: list[TagDetailOut] = Field(default_factory=list)
+
+
 class LogStatsResponse(CamelModel):
     """Aggregated catalog metrics and statistics."""
 
@@ -140,6 +182,10 @@ class LogStatsResponse(CamelModel):
     by_folder: dict[str, int] = Field(default_factory=dict, description="Count of logs grouped by monthly folder")
     total_tags: int = Field(..., description="Count of distinct tags")
     top_tags: list[TagCount] = Field(default_factory=list, description="Top most frequent tags")
+    needs_attention: int = Field(default=0, description="Count of logs pending upload, failed, or aborted")
+    uploads_per_month: list[MonthlyUploadStats] = Field(default_factory=list, description="Monthly upload statistics")
+    recent_uploads: list[LogOut] = Field(default_factory=list, description="Most recent log uploads")
+    tag_details: list[TagDetailOut] = Field(default_factory=list, description="Detailed tag breakdown")
 
 
 class LogCleanupResponse(CamelModel):
@@ -166,5 +212,9 @@ __all__ = [
     "LogSearchResponse",
     "LogStatsResponse",
     "LogUpdateRequest",
+    "MonthlyUploadStats",
+    "TagCoOccurrence",
     "TagCount",
+    "TagDetailOut",
+    "TagsStatsResponse",
 ]

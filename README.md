@@ -86,7 +86,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Production Deployment (Docker Compose)
 
-The service is packaged as a lightweight, multi-stage Docker container designed to run on a production VPS alongside other services.
+The service is packaged as a lightweight Docker container designed to run on a production VPS alongside other services.
 
 ```bash
 # 1. Create persistent storage directories
@@ -130,16 +130,17 @@ pytest --cov=app -v
 | :--- | :--- | :--- |
 | `ENVIRONMENT` | `development` | App environment (`development`, `staging`, `production`) |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/cloud_logs.db` | SQLite database connection string |
-| `JWT_SECRET` | *(random)* | Secret key for signing HS256 JWT tokens |
+| `JWT_SECRET` | `dev-secret-...` | Secret key for signing HS256 JWT tokens. Must be >= 32 chars and cannot be default in production. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Lifetime of access tokens in minutes |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `90` | Lifetime of refresh tokens in days |
-| `MASTER_API_KEY` | `""` | Master API Key for system-level automation |
+| `MASTER_API_KEY` | `""` | Master API Key for system-level automation (validated in production) |
 | `GITHUB_CLIENT_ID` | `""` | GitHub OAuth application Client ID |
 | `GITHUB_CLIENT_SECRET` | `""` | GitHub OAuth application Client Secret |
-| `GITHUB_ORG_NAME` | `Hyperloop-UPV` | Target GitHub organization for membership validation |
+| `GITHUB_ORG_NAME` | `Hyperloop-UPV` | Target GitHub organization for membership validation (required in production unless `ALLOW_PUBLIC_GITHUB_LOGIN=true`) |
+| `ALLOW_PUBLIC_GITHUB_LOGIN` | `false` | Explicitly enable mode without organization requirement in production |
 | `GDRIVE_SERVICE_ACCOUNT_PATH` | `""` | Path to Google Service Account JSON credentials |
 | `GDRIVE_ROOT_FOLDER_ID` | `""` | ID of root Google Drive folder for telemetry archives |
 | `GDRIVE_SIMULATION_MODE` | `false` | Explicitly enable local simulation of Google Drive API |
 | `CLEANUP_ENABLED` | `true` | Enable automated weekly background cleanup worker |
-| `CLEANUP_RETENTION_DAYS` | `30` | Retention threshold in days for uncompleted uploads |
+| `CLEANUP_RETENTION_DAYS` | `30` | Retention threshold in days for uncompleted uploads and revoked tokens |
 | `CLEANUP_INTERVAL_HOURS` | `168` | Interval between cleanup background cycles (168h = 1 week) |

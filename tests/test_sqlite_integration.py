@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -195,13 +195,10 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(self.client.get(f"/api/v1/logs/{log_id}", headers=self.eng_headers).status_code, 200)
         self.assertEqual(self.client.get("/api/v1/logs/tags", headers=self.eng_headers).status_code, 200)
         self.assertEqual(self.client.get("/api/v1/logs/stats", headers=self.eng_headers).status_code, 200)
+        self.assertEqual(self.client.get("/api/v1/logs?metadataQuery=secret", headers=self.eng_headers).status_code, 200)
 
         # 3. Common user CANNOT perform admin actions (403 Forbidden)
-        # 3a. Searching by client metadata
-        res_meta = self.client.get("/api/v1/logs?metadataQuery=secret", headers=self.eng_headers)
-        self.assertEqual(res_meta.status_code, 403)
-
-        # 3b. Triggering cleanup
+        # 3a. Triggering cleanup
         res_clean = self.client.post("/api/v1/logs/cleanup", headers=self.eng_headers)
         self.assertEqual(res_clean.status_code, 403)
 
@@ -337,7 +334,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 session.add_all([l1, l2, l3, l4])
                 await session.commit()
 
-        import asyncio
         asyncio.run(seed())
 
         res = self.client.get("/api/v1/logs/stats", headers=self.viewer_headers)
@@ -384,7 +380,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 session.add_all([l1, l2])
                 await session.commit()
 
-        import asyncio
         asyncio.run(seed())
 
         # Test alphabetical sorting ascending
@@ -403,10 +398,11 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         res_size = self.client.get("/api/v1/logs?sortBy=fileSize&sortOrder=desc", headers=self.eng_headers)
         self.assertEqual(res_size.json()["items"][0]["fileSize"], 500)
 
-        # Client metadata search by regular user (engineer/viewer) -> 403 Forbidden
-        res_forbidden = self.client.get("/api/v1/logs?metadataQuery=pod-orin", headers=self.eng_headers)
-        self.assertEqual(res_forbidden.status_code, 403)
-        self.assertIn("restricted to administrators", res_forbidden.json()["detail"])
+        # Client metadata search by regular user (engineer/viewer) -> 200 OK
+        res_user_meta = self.client.get("/api/v1/logs?metadataQuery=pod-orin", headers=self.eng_headers)
+        self.assertEqual(res_user_meta.status_code, 200)
+        self.assertEqual(res_user_meta.json()["total"], 1)
+        self.assertEqual(res_user_meta.json()["items"][0]["fileName"], "alpha.zip")
 
         # Client metadata search by admin -> 200 OK
         res_admin = self.client.get("/api/v1/logs?metadataQuery=pod-orin", headers=self.admin_headers)
@@ -506,7 +502,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 session.add_all([l1, l2, l3])
                 await session.commit()
 
-        import asyncio
         asyncio.run(seed())
 
         # Exact tag isolation: searching for 'pod' should NOT match 'pod_v2'
@@ -667,7 +662,8 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 token_hash="hash_expired",
                 family_id=uuid.uuid4(),
                 is_revoked=False,
-                expires_at=datetime.now(UTC) - timedelta(hours=1),
+                expires_at=now - timedelta(days=35),
+                created_at=now - timedelta(days=40),
             )
             tok_revoked = RefreshToken(
                 id=id_revoked_tok,
@@ -675,7 +671,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 token_hash="hash_revoked",
                 family_id=uuid.uuid4(),
                 is_revoked=True,
-                expires_at=datetime.now(UTC) + timedelta(days=7),
+                revoked_at=now - timedelta(days=35),
+                created_at=now - timedelta(days=40),
+                expires_at=now + timedelta(days=7),
             )
             tok_active = RefreshToken(
                 id=id_active_tok,
@@ -725,6 +723,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         async with self.session_factory() as session:
             db_pending = await session.get(Log, id_old_pending)
             self.assertIsNotNone(db_pending)
+            assert db_pending is not None
             self.assertIsNone(db_pending.deleted_at)
             self.assertIsNotNone(await session.get(RefreshToken, id_expired_tok))
             self.assertIsNotNone(await session.get(RefreshToken, id_revoked_tok))
@@ -749,8 +748,12 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             p_log = await session.get(Log, id_old_pending)
             a_log = await session.get(Log, id_old_aborted)
             f_log = await session.get(Log, id_old_failed)
+            self.assertIsNotNone(p_log)
+            self.assertIsNotNone(a_log)
+            self.assertIsNotNone(f_log)
+            assert p_log is not None and a_log is not None and f_log is not None
             self.assertIsNotNone(p_log.deleted_at)
-            self.assertIn("[Cleaned by weekly GC", p_log.note)
+            self.assertIn("[Cleaned by weekly GC", p_log.note or "")
             self.assertIsNotNone(a_log.deleted_at)
             self.assertIsNotNone(f_log.deleted_at)
 
@@ -762,16 +765,19 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             # CRITICAL: Old ready telemetry log was NOT deleted
             r_old = await session.get(Log, id_old_ready)
             self.assertIsNotNone(r_old)
+            assert r_old is not None
             self.assertIsNone(r_old.deleted_at)
             self.assertEqual(r_old.status, "ready")
 
             # Recent pending and ready logs were NOT deleted
             p_rec = await session.get(Log, id_recent_pending)
             self.assertIsNotNone(p_rec)
+            assert p_rec is not None
             self.assertIsNone(p_rec.deleted_at)
 
             r_rec = await session.get(Log, id_recent_ready)
             self.assertIsNotNone(r_rec)
+            assert r_rec is not None
             self.assertIsNone(r_rec.deleted_at)
 
         # 3. Cleanup with purgeSoftDeleted=true via Master API Key
@@ -836,6 +842,8 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         # Confirm DB reflects new role
         async with self.session_factory() as session:
             db_u = await session.get(User, target_id)
+            self.assertIsNotNone(db_u)
+            assert db_u is not None
             self.assertEqual(db_u.permissions, ["admin"])
             self.assertEqual(db_u.role, "admin")
 
@@ -1074,3 +1082,253 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             )
             self.assertEqual(res.status_code, 403)
             self.assertIn("User is not a member", res.json()["detail"])
+
+    def test_log_duration_computation(self):
+        """Verify duration computed field on Log model and LogOut schema."""
+        start = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
+        end = datetime(2026, 10, 23, 10, 15, 30, 456000, tzinfo=UTC)
+
+        async def seed():
+            async with self.session_factory() as session:
+                l1 = Log(
+                    id=uuid.uuid4(),
+                    file_name="run_duration.zip",
+                    status="ready",
+                    file_size=1024,
+                    start_date=start,
+                    end_date=end,
+                    created_by=self.engineer_id,
+                )
+                l2 = Log(
+                    id=uuid.uuid4(),
+                    file_name="run_no_duration.zip",
+                    status="ready",
+                    file_size=512,
+                    created_by=self.engineer_id,
+                )
+                session.add_all([l1, l2])
+                await session.commit()
+                return l1.id, l2.id
+
+        l1_id, l2_id = asyncio.run(seed())
+
+        # Test GET /api/v1/logs/{id} for log with duration
+        res1 = self.client.get(f"/api/v1/logs/{l1_id}", headers=self.eng_headers)
+        self.assertEqual(res1.status_code, 200)
+        data1 = res1.json()
+        self.assertNotIn("durationSeconds", data1)
+        self.assertEqual(data1["duration"], 930.456)
+
+        # Test GET /api/v1/logs/{id} for log without dates
+        res2 = self.client.get(f"/api/v1/logs/{l2_id}", headers=self.eng_headers)
+        self.assertEqual(res2.status_code, 200)
+        data2 = res2.json()
+        self.assertNotIn("durationSeconds", data2)
+        self.assertIsNone(data2["duration"])
+
+        # Test search endpoint also includes duration
+        res_search = self.client.get("/api/v1/logs?textQuery=run_duration", headers=self.eng_headers)
+        self.assertEqual(res_search.status_code, 200)
+        items = res_search.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertNotIn("durationSeconds", items[0])
+        self.assertEqual(items[0]["duration"], 930.456)
+
+    def test_overlapping_date_filtering(self):
+        """Verify overlapping interval date filters in search_logs instead of strict enclosure."""
+        # Log A: 10:00 to 11:00
+        # Log B: 10:30 to 12:00
+        # Log C: 12:00 to 13:00
+        # Log D: file_date 10:45 (start_date and end_date None)
+        t1000 = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
+        t1030 = datetime(2026, 10, 23, 10, 30, 0, tzinfo=UTC)
+        t1045 = datetime(2026, 10, 23, 10, 45, 0, tzinfo=UTC)
+        t1100 = datetime(2026, 10, 23, 11, 0, 0, tzinfo=UTC)
+        t1200 = datetime(2026, 10, 23, 12, 0, 0, tzinfo=UTC)
+        t1300 = datetime(2026, 10, 23, 13, 0, 0, tzinfo=UTC)
+
+        async def seed():
+            async with self.session_factory() as session:
+                lA = Log(
+                    id=uuid.uuid4(),
+                    file_name="overlap_A.zip",
+                    status="ready",
+                    start_date=t1000,
+                    end_date=t1100,
+                    created_by=self.engineer_id,
+                )
+                lB = Log(
+                    id=uuid.uuid4(),
+                    file_name="overlap_B.zip",
+                    status="ready",
+                    start_date=t1030,
+                    end_date=t1200,
+                    created_by=self.engineer_id,
+                )
+                lC = Log(
+                    id=uuid.uuid4(),
+                    file_name="overlap_C.zip",
+                    status="ready",
+                    start_date=t1200,
+                    end_date=t1300,
+                    created_by=self.engineer_id,
+                )
+                lD = Log(
+                    id=uuid.uuid4(),
+                    file_name="overlap_D.zip",
+                    status="ready",
+                    file_date=t1045,
+                    created_by=self.engineer_id,
+                )
+                session.add_all([lA, lB, lC, lD])
+                await session.commit()
+
+        asyncio.run(seed())
+
+        # Query interval: [10:45, 11:15]
+        # lA (10:00-11:00) overlaps! (end_date 11:00 >= 10:45, start_date 10:00 <= 11:15)
+        # lB (10:30-12:00) overlaps! (end_date 12:00 >= 10:45, start_date 10:30 <= 11:15)
+        # lC (12:00-13:00) DOES NOT overlap (start_date 12:00 > 11:15)
+        # lD (file_date 10:45) overlaps via coalesce fallback (file_date >= 10:45 and <= 11:15)
+        res = self.client.get(
+            "/api/v1/logs?startDate=2026-10-23T10:45:00Z&endDate=2026-10-23T11:15:00Z&textQuery=overlap_",
+            headers=self.eng_headers,
+        )
+        self.assertEqual(res.status_code, 200)
+        file_names = {item["fileName"] for item in res.json()["items"]}
+        self.assertIn("overlap_A.zip", file_names)
+        self.assertIn("overlap_B.zip", file_names)
+        self.assertIn("overlap_D.zip", file_names)
+        self.assertNotIn("overlap_C.zip", file_names)
+
+    def test_rich_stats_and_tag_metrics(self):
+        """Verify needs_attention, recent_uploads, uploads_per_month, tag_details, and /tags/stats."""
+        now = datetime(2026, 11, 8, 12, 0, 0, tzinfo=UTC)
+
+        async def seed():
+            async with self.session_factory() as session:
+                # June 2026 log
+                l_jun = Log(
+                    id=uuid.uuid4(),
+                    file_name="jun_log.zip",
+                    status="ready",
+                    drive_folder="2026_06",
+                    file_size=1000,
+                    tags=["pcu", "debug"],
+                    created_by=self.engineer_id,
+                    created_at=datetime(2026, 6, 15, 10, 0, 0, tzinfo=UTC),
+                )
+                # July 2026 log
+                l_jul = Log(
+                    id=uuid.uuid4(),
+                    file_name="jul_log.zip",
+                    status="pending_upload",
+                    drive_folder="2026_07",
+                    file_size=2000,
+                    tags=["pcu", "bench"],
+                    created_by=self.engineer_id,
+                    created_at=datetime(2026, 7, 20, 10, 0, 0, tzinfo=UTC),
+                )
+                # November 2026 logs
+                l_nov1 = Log(
+                    id=uuid.uuid4(),
+                    file_name="nov_ready.zip",
+                    status="ready",
+                    drive_folder="2026_11",
+                    file_size=3000,
+                    tags=["bms", "pcu"],
+                    created_by=self.engineer_id,
+                    created_at=now,
+                )
+                l_nov2 = Log(
+                    id=uuid.uuid4(),
+                    file_name="nov_failed.zip",
+                    status="failed",
+                    drive_folder="2026_11",
+                    file_size=500,
+                    tags=["bms"],
+                    created_by=self.engineer_id,
+                    created_at=now,
+                )
+                l_nov3 = Log(
+                    id=uuid.uuid4(),
+                    file_name="nov_aborted.zip",
+                    status="aborted",
+                    drive_folder="2026_11",
+                    file_size=500,
+                    tags=["debug"],
+                    created_by=self.engineer_id,
+                    created_at=now,
+                )
+                session.add_all([l_jun, l_jul, l_nov1, l_nov2, l_nov3])
+                await session.commit()
+
+        asyncio.run(seed())
+
+        # 1. Test /api/v1/logs/stats
+        stats_res = self.client.get("/api/v1/logs/stats", headers=self.eng_headers)
+        self.assertEqual(stats_res.status_code, 200)
+        stats = stats_res.json()
+
+        # Needs attention: pending_upload (1) + failed (1) + aborted (1) = 3
+        self.assertEqual(stats["needsAttention"], 3)
+
+        # Recent uploads: at most 5 items ordered by created_at desc
+        self.assertLessEqual(len(stats["recentUploads"]), 5)
+        self.assertGreaterEqual(len(stats["recentUploads"]), 3)
+        self.assertIn("fileName", stats["recentUploads"][0])
+
+        # Uploads per month: sorted chronologically
+        uploads_per_month = stats["uploadsPerMonth"]
+        self.assertGreaterEqual(len(uploads_per_month), 3)
+        # Verify chronological order
+        for idx in range(len(uploads_per_month) - 1):
+            curr = uploads_per_month[idx]
+            nxt = uploads_per_month[idx + 1]
+            self.assertLessEqual((curr["year"], curr["month"]), (nxt["year"], nxt["month"]))
+
+        # Verify month labels and counts
+        jun_stat = next(m for m in uploads_per_month if m["folder"] == "2026_06")
+        self.assertEqual(jun_stat["label"], "Jun 2026")
+        self.assertEqual(jun_stat["count"], 1)
+        self.assertEqual(jun_stat["bytes"], 1000)
+
+        # Tag details in stats
+        tag_details = stats["tagDetails"]
+        self.assertGreater(len(tag_details), 0)
+        pcu_detail = next(t for t in tag_details if t["tag"] == "pcu")
+        self.assertEqual(pcu_detail["logs"], 3)  # jun, jul, nov1
+        self.assertEqual(pcu_detail["totalSize"], 1000 + 2000 + 3000)
+        self.assertEqual(pcu_detail["averageSize"], 2000.0)
+        self.assertEqual(pcu_detail["statusMix"]["ready"], 2)
+        self.assertEqual(pcu_detail["statusMix"]["pending_upload"], 1)
+        # Check co-occurrences in usedWith
+        used_with_tags = {co["tag"] for co in pcu_detail["usedWith"]}
+        self.assertIn("debug", used_with_tags)
+        self.assertIn("bench", used_with_tags)
+        self.assertIn("bms", used_with_tags)
+
+        # 2. Test GET /api/v1/logs/tags/stats
+        tags_stats_res = self.client.get("/api/v1/logs/tags/stats", headers=self.eng_headers)
+        self.assertEqual(tags_stats_res.status_code, 200)
+        ts_data = tags_stats_res.json()
+        self.assertIn("totalTags", ts_data)
+        self.assertIn("totalSize", ts_data)
+        self.assertIn("tags", ts_data)
+        self.assertEqual(ts_data["totalTags"], len(ts_data["tags"]))
+        # Total size is sum of tag sizes
+        self.assertEqual(ts_data["totalSize"], sum(t["totalSize"] for t in ts_data["tags"]))
+
+        # 3. Test GET /api/v1/logs/tags?detailed=true
+        detailed_tags_res = self.client.get("/api/v1/logs/tags?detailed=true", headers=self.eng_headers)
+        self.assertEqual(detailed_tags_res.status_code, 200)
+        dt_data = detailed_tags_res.json()
+        self.assertIn("totalTags", dt_data)
+        self.assertIn("tags", dt_data)
+
+        # 4. Test GET /api/v1/logs/tags?detailed=false returns plain list of strings
+        plain_tags_res = self.client.get("/api/v1/logs/tags?detailed=false", headers=self.eng_headers)
+        self.assertEqual(plain_tags_res.status_code, 200)
+        self.assertIsInstance(plain_tags_res.json(), list)
+        self.assertIn("pcu", plain_tags_res.json())
+

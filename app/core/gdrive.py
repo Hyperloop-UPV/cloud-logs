@@ -125,10 +125,11 @@ class GoogleDriveService:
                     )
 
                 token_data = resp.json()
-                self._access_token = token_data["access_token"]
+                token = str(token_data["access_token"])
+                self._access_token = token
                 expires_in = token_data.get("expires_in", 3600)
                 self._token_expires_at = now + expires_in
-                return self._access_token
+                return token
 
             except HTTPException:
                 raise

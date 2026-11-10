@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import collections
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import (
@@ -18,7 +20,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import RedirectResponse
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import ColumnElement, String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -44,7 +46,11 @@ from app.schemas.log import (
     LogSearchResponse,
     LogStatsResponse,
     LogUpdateRequest,
+    MonthlyUploadStats,
+    TagCoOccurrence,
     TagCount,
+    TagDetailOut,
+    TagsStatsResponse,
 )
 
 logger = logging.getLogger("cloud_logs.logs")
@@ -207,7 +213,7 @@ async def complete_log_upload(
     return LogCompleteResponse(
         id=log.id,
         status=log.status,
-        drive_url=log.drive_url,
+        drive_url=log.drive_url or "",
         drive_folder=log.drive_folder,
         file_name=log.file_name,
         file_size=log.file_size,
@@ -292,12 +298,12 @@ async def search_logs(
     creator: str | None = Query(default=None, description="Filter by username of creator"),
     sort_by: str = Query(default="createdAt", alias="sortBy", description="Sort by: 'createdAt', 'startDate', 'endDate', 'fileName', 'fileSize'"),
     sort_order: str = Query(default="desc", alias="sortOrder", description="Sort direction: 'asc' or 'desc'"),
-    metadata_query: str | None = Query(default=None, alias="metadataQuery", description="Internal search within clientMetadata (Admins only)"),
+    metadata_query: str | None = Query(default=None, alias="metadataQuery", description="Internal search within clientMetadata"),
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
 ) -> LogSearchResponse:
     """Search and paginate logs with dynamic sorting."""
-    conditions = [Log.deleted_at.is_(None)]
+    conditions: list[ColumnElement[bool]] = [Log.deleted_at.is_(None)]
 
     if status_filter:
         conditions.append(Log.status == status_filter)
@@ -320,21 +326,15 @@ async def search_logs(
             conditions.append(cast(Log.tags, String).like(f'%"{t}"%'))
 
     if start_date:
-        conditions.append(Log.start_date >= start_date)
+        conditions.append(func.coalesce(Log.end_date, Log.start_date, Log.file_date) >= start_date)
 
     if end_date:
-        conditions.append(Log.end_date <= end_date)
+        conditions.append(func.coalesce(Log.start_date, Log.file_date) <= end_date)
 
     if creator:
         conditions.append(User.username.ilike(creator))
 
-    # Internal search by client_metadata restricted to admins/master key
     if metadata_query:
-        if not auth.has_permission("admin"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Searching by client metadata is restricted to administrators",
-            )
         conditions.append(cast(Log.client_metadata, String).ilike(f"%{metadata_query}%"))
 
     # Sorting resolution
@@ -398,17 +398,184 @@ async def search_logs(
     )
 
 
+MONTH_NAMES = {
+    1: "Jan",
+    2: "Feb",
+    3: "Mar",
+    4: "Apr",
+    5: "May",
+    6: "Jun",
+    7: "Jul",
+    8: "Aug",
+    9: "Sep",
+    10: "Oct",
+    11: "Nov",
+    12: "Dec",
+}
+
+
+def compute_tag_details(logs: Sequence[Log]) -> tuple[int, int, list[TagDetailOut]]:
+    """Compute detailed statistics for each tag from a sequence of logs."""
+    tag_logs_map: dict[str, list[Log]] = collections.defaultdict(list)
+
+    for log in logs:
+        if not log.tags:
+            continue
+        raw_tags = log.tags if isinstance(log.tags, list) else []
+        seen_in_log: set[str] = set()
+        for t in raw_tags:
+            if isinstance(t, str):
+                t_clean = t.strip()
+                if t_clean and t_clean not in seen_in_log:
+                    seen_in_log.add(t_clean)
+                    tag_logs_map[t_clean].append(log)
+
+    tag_details: list[TagDetailOut] = []
+
+    for tag, tag_logs in tag_logs_map.items():
+        logs_count = len(tag_logs)
+        total_size = sum(log.file_size or 0 for log in tag_logs)
+        avg_size = round(total_size / logs_count, 2) if logs_count > 0 else 0.0
+
+        status_counts = collections.Counter(log.status for log in tag_logs if log.status)
+        status_mix = dict(status_counts)
+
+        dates = [
+            (dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC))
+            for log in tag_logs
+            if (dt := log.created_at) is not None
+        ]
+        first_used = min(dates) if dates else None
+        last_used = max(dates) if dates else None
+
+        # Co-occurrence
+        co_counts: collections.Counter[str] = collections.Counter()
+        for log in tag_logs:
+            raw_tags = log.tags if isinstance(log.tags, list) else []
+            other_tags = {
+                t.strip()
+                for t in raw_tags
+                if isinstance(t, str) and t.strip() and t.strip() != tag
+            }
+            for ot in other_tags:
+                co_counts[ot] += 1
+
+        sorted_co = sorted(co_counts.items(), key=lambda item: (-item[1], item[0]))
+        used_with = [
+            TagCoOccurrence(tag=ot, count=cnt)
+            for ot, cnt in sorted_co[:10]
+        ]
+
+        tag_details.append(
+            TagDetailOut(
+                tag=tag,
+                logs=logs_count,
+                total_size=total_size,
+                average_size=avg_size,
+                status_mix=status_mix,
+                first_used=first_used,
+                last_used=last_used,
+                used_with=used_with,
+            )
+        )
+
+    tag_details.sort(key=lambda t: (-t.logs, -t.total_size, t.tag))
+    total_tags = len(tag_details)
+    total_size = sum(t.total_size for t in tag_details)
+
+    return total_tags, total_size, tag_details
+
+
+def compute_monthly_upload_stats(logs: Sequence[Log]) -> list[MonthlyUploadStats]:
+    """Compute monthly upload counts and sizes sorted chronologically."""
+    month_data: dict[tuple[int, int], dict[str, Any]] = {}
+
+    for log in logs:
+        year: int | None = None
+        month: int | None = None
+        folder = log.drive_folder
+
+        if folder:
+            parts = folder.split("_")
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                year = int(parts[0])
+                month = int(parts[1])
+
+        if year is None or month is None:
+            ref_dt = log.file_date or log.created_at
+            if ref_dt:
+                year = ref_dt.year
+                month = ref_dt.month
+                folder = f"{year}_{month:02d}"
+            else:
+                continue
+
+        key = (year, month)
+        if key not in month_data:
+            label = f"{MONTH_NAMES.get(month, f'{month:02d}')} {year}"
+            month_data[key] = {
+                "folder": folder or f"{year}_{month:02d}",
+                "year": year,
+                "month": month,
+                "label": label,
+                "count": 0,
+                "bytes": 0,
+            }
+
+        month_data[key]["count"] += 1
+        month_data[key]["bytes"] += int(log.file_size or 0)
+
+    sorted_entries = sorted(month_data.values(), key=lambda x: (x["year"], x["month"]))
+    return [MonthlyUploadStats(**entry) for entry in sorted_entries]
+
+
 @router.get(
-    "/tags",
-    response_model=list[str],
-    summary="List all unique tags",
-    description="Retrieve list of all distinct tags currently used across logs for frontend autocomplete.",
+    "/tags/stats",
+    response_model=TagsStatsResponse,
+    summary="Get detailed tag metrics and statistics",
+    description="Retrieve aggregated metrics for all tags including usage counts, size, status breakdown, and co-occurrences.",
 )
-async def list_tags(
+async def get_tags_stats(
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
-) -> list[str]:
-    """Retrieve distinct tag list."""
+) -> TagsStatsResponse:
+    """Retrieve detailed tag breakdown and catalog metrics."""
+    stmt = select(Log).where(Log.deleted_at.is_(None))
+    result = await db.execute(stmt)
+    all_logs = result.scalars().all()
+
+    total_tags, total_size, tag_details = compute_tag_details(all_logs)
+
+    return TagsStatsResponse(
+        total_tags=total_tags,
+        total_size=total_size,
+        tags=tag_details,
+    )
+
+
+@router.get(
+    "/tags",
+    response_model=list[str] | TagsStatsResponse,
+    summary="List all unique tags",
+    description="Retrieve list of all distinct tags currently used across logs for frontend autocomplete, or rich stats when detailed=True.",
+)
+async def list_tags(
+    detailed: bool = Query(default=False, description="If true, return detailed tag metrics"),
+    auth: AuthContext = Depends(get_current_auth),
+    db: AsyncSession = Depends(get_db),
+) -> list[str] | TagsStatsResponse:
+    """Retrieve distinct tag list or detailed tag metrics."""
+    if detailed:
+        stmt = select(Log).where(Log.deleted_at.is_(None))
+        result = await db.execute(stmt)
+        all_logs = result.scalars().all()
+        total_tags, total_size, tag_details = compute_tag_details(all_logs)
+        return TagsStatsResponse(
+            total_tags=total_tags,
+            total_size=total_size,
+            tags=tag_details,
+        )
+
     stmt = select(Log.tags).where(Log.deleted_at.is_(None))
     result = await db.execute(stmt)
     tag_rows = result.scalars().all()
@@ -420,7 +587,7 @@ async def list_tags(
     "/stats",
     response_model=LogStatsResponse,
     summary="Get log catalog statistics",
-    description="Retrieve aggregated metrics including total logs, size, status distribution, monthly counts, and top tags.",
+    description="Retrieve aggregated metrics including total logs, size, status distribution, monthly counts, needs attention, recent uploads, and tag details.",
 )
 async def get_log_stats(
     auth: AuthContext = Depends(get_current_auth),
@@ -472,6 +639,33 @@ async def get_log_stats(
         for tag, cnt in tag_counter.most_common(10)
     ]
 
+    # 6. Needs attention (pending_upload, failed, aborted)
+    needs_attention = (
+        by_status.get("pending_upload", 0)
+        + by_status.get("failed", 0)
+        + by_status.get("aborted", 0)
+    )
+
+    # 7. Recent uploads (latest 5 active logs)
+    recent_stmt = (
+        select(Log)
+        .where(Log.deleted_at.is_(None))
+        .options(selectinload(Log.creator_user))
+        .order_by(Log.created_at.desc())
+        .limit(5)
+    )
+    recent_res = await db.execute(recent_stmt)
+    recent_logs = recent_res.scalars().all()
+    recent_uploads = [LogOut.model_validate(log) for log in recent_logs]
+
+    # 8. All logs for detailed monthly and tag stats
+    all_logs_stmt = select(Log).where(Log.deleted_at.is_(None))
+    all_logs_res = await db.execute(all_logs_stmt)
+    all_logs = all_logs_res.scalars().all()
+
+    uploads_per_month = compute_monthly_upload_stats(all_logs)
+    _, _, tag_details = compute_tag_details(all_logs)
+
     return LogStatsResponse(
         total_logs=total_logs,
         total_bytes=total_bytes,
@@ -479,6 +673,10 @@ async def get_log_stats(
         by_folder=by_folder,
         total_tags=total_tags,
         top_tags=top_tags,
+        needs_attention=needs_attention,
+        uploads_per_month=uploads_per_month,
+        recent_uploads=recent_uploads,
+        tag_details=tag_details,
     )
 
 
