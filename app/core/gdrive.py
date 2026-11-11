@@ -224,7 +224,7 @@ class GoogleDriveService:
         """
         if self.simulation_mode:
             upload_url = (
-                f"https://www.googleapis.com/upload/drive/v3/files?"
+                f"/api/v1/logs/simulated-upload/{log_id}?"
                 f"uploadType=resumable&upload_id={log_id}&folder={folder_name}"
             )
             return upload_url, None

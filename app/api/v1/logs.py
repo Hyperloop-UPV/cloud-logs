@@ -329,10 +329,10 @@ async def search_logs(
         conditions.append(func.coalesce(Log.end_date, Log.start_date, Log.file_date) >= start_date)
 
     if end_date:
-        conditions.append(func.coalesce(Log.start_date, Log.file_date) <= end_date)
+        conditions.append(func.coalesce(Log.start_date, Log.end_date, Log.file_date) <= end_date)
 
     if creator:
-        conditions.append(User.username.ilike(creator))
+        conditions.append(User.username.ilike(f"%{creator}%"))
 
     if metadata_query:
         conditions.append(cast(Log.client_metadata, String).ilike(f"%{metadata_query}%"))
@@ -720,6 +720,23 @@ async def cleanup_logs(
     return LogCleanupResponse(**res)
 
 
+@router.put(
+    "/simulated-upload/{id}",
+    summary="Simulated Google Drive upload endpoint for development",
+    description="Accept simulated direct file uploads during development/testing without real Google Drive credentials.",
+    include_in_schema=False,
+)
+async def simulated_upload(
+    id: UUID = Path(..., description="Log ID"),
+) -> Response:
+    """Mock upload endpoint that absorbs file uploads in development mode."""
+    return Response(
+        content=b'{"status": "success"}',
+        media_type="application/json",
+        status_code=status.HTTP_200_OK,
+    )
+
+
 @router.get(
     "/{id}",
     response_model=LogOut,
@@ -762,6 +779,7 @@ async def get_log(
 )
 async def download_log(
     id: UUID = Path(..., description="UUID of the log to download"),
+    token: str | None = Query(default=None, description="Optional access token or master key for browser link downloads"),
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:

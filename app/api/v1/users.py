@@ -6,7 +6,7 @@ import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
@@ -48,6 +48,14 @@ async def get_current_user_profile(
 ) -> UserOut:
     """Retrieve currently authenticated user profile."""
     if not auth.user:
+        if auth.is_master:
+            return UserOut(
+                id=UUID("00000000-0000-0000-0000-000000000000"),
+                username="master_api_key",
+                github_username="system",
+                role="admin",
+                created_at=None,
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User profile not available for system callers",
@@ -114,6 +122,22 @@ async def update_user_role(
 
     old_role = user.role
     new_role = payload.role
+
+    if auth.user and auth.user.id == id and new_role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrators cannot demote themselves. Ask another administrator to change your role.",
+        )
+
+    if user.role == "admin" and new_role != "admin":
+        admin_count_stmt = select(func.count(User.id)).where(User.role == "admin")
+        admin_count = (await db.execute(admin_count_stmt)).scalar() or 0
+        if admin_count <= 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot demote the last remaining administrator.",
+            )
+
     user.role = new_role
     await db.commit()
     await db.refresh(user)

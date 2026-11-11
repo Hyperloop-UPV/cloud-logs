@@ -181,3 +181,22 @@ class TestUsersAPI(IsolatedAsyncioTestCase):
             headers=self.admin_headers,
         )
         self.assertEqual(res.status_code, 404)
+
+    def test_get_current_user_me_as_master_key(self):
+        """GET /api/v1/users/me returns synthetic user profile for Master Key."""
+        with patch.object(settings, "master_api_key_hash", self.master_hash):
+            res = self.client.get("/api/v1/users/me", headers=self.master_headers)
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertEqual(data["username"], "master_api_key")
+            self.assertEqual(data["role"], "admin")
+
+    def test_update_user_role_admin_cannot_demote_self(self):
+        """Administrators cannot demote themselves to standard user."""
+        res = self.client.patch(
+            f"/api/v1/users/{self.admin_id}/role",
+            json={"role": "user"},
+            headers=self.admin_headers,
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("demote", res.json()["detail"].lower())

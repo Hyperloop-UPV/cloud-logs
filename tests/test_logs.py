@@ -403,6 +403,26 @@ class TestLogsAPI(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_download_log_with_query_param_token(self):
+        log_id = uuid.uuid4()
+        ready_log = self._create_sample_log(log_id=log_id, status="ready")
+        self.mock_result.scalar_one_or_none.return_value = ready_log
+
+        response = self.client.get(
+            f"/api/v1/logs/{log_id}/download?token={self.token}",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response.headers["location"], ready_log.drive_url)
+
+    def test_simulated_upload_endpoint(self):
+        log_id = uuid.uuid4()
+        response = self.client.put(
+            f"/api/v1/logs/simulated-upload/{log_id}",
+            content=b"dummy binary data",
+        )
+        self.assertEqual(response.status_code, 200)
+
     def test_search_logs_with_sorting(self):
         sample_log = self._create_sample_log(status="ready")
         self.mock_result.scalar.return_value = 1

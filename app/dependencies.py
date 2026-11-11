@@ -85,27 +85,24 @@ async def get_current_auth(
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
-    # 2. Check Authorization Header (Bearer JWT or Master Key)
+    # 2. Check Authorization Header (Bearer JWT or Master Key) or query param ?token=
     auth_header = request.headers.get("Authorization")
-    if not auth_header:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    token = None
+    if auth_header:
+        if not auth_header.lower().startswith("bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization scheme, expected 'Bearer <token>'",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        token = auth_header[7:].strip()
+    elif "token" in request.query_params:
+        token = request.query_params.get("token", "").strip()
 
-    if not auth_header.lower().startswith("bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization scheme, expected 'Bearer <token>'",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = auth_header[7:].strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Empty bearer token",
+            detail="Missing authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
