@@ -1,4 +1,4 @@
-# Cloud Logs API
+# Cloud Logs — Backend API
 
 Centralized telemetry and diagnostic log metadata catalog service.
 
@@ -38,8 +38,8 @@ Centralized telemetry and diagnostic log metadata catalog service.
 
 ## Documentation
 
-- **[System Architecture](docs/ARCHITECTURE.md)**: Detailed sequence diagrams, SQLite ER schema, RBAC permission matrix, Google Drive hierarchy, and background worker mechanics.
-- **[Frontend & Client Integration Guide](docs/API_FRONTEND.md)**: Concise REST API reference with camelCase JSON schemas, query parameters, and code examples for frontend and control tool developers.
+- **[System Architecture](../docs/ARCHITECTURE.md)**: Detailed sequence diagrams, SQLite ER schema, RBAC permission matrix, Google Drive hierarchy, and background worker mechanics.
+- **[Frontend & Client Integration Guide](../docs/API_FRONTEND.md)**: Concise REST API reference with camelCase JSON schemas, query parameters, and code examples for frontend and control tool developers.
 
 ---
 
@@ -50,6 +50,7 @@ Centralized telemetry and diagnostic log metadata catalog service.
 - An active virtual environment (`venv`).
 
 ### 2. Install Dependencies
+From the `backend/` directory:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -57,7 +58,7 @@ pip install -r requirements.txt
 ```
 
 ### 3. Environment Configuration
-Copy the sample environment file:
+Copy the sample environment file inside `backend/`:
 ```bash
 cp .env.example .env
 ```
@@ -73,6 +74,7 @@ CLEANUP_INTERVAL_HOURS=168
 > **Note**: For local development without Google Cloud credentials, set `GDRIVE_SIMULATION_MODE=true` to simulate Google Drive sessions and URLs locally.
 
 ### 4. Run the Development Server
+From the `backend/` directory:
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -87,15 +89,16 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 The service is packaged as a lightweight Docker container designed to run on a production VPS alongside other services.
 
+From the repository root:
 ```bash
 # 1. Create persistent storage directories
-mkdir -p data credentials
+mkdir -p backend/data backend/credentials
 
 # 2. Place your Google Service Account key
-cp /path/to/service_account.json credentials/service_account.json
+cp /path/to/service_account.json backend/credentials/service_account.json
 
 # 3. Configure production variables
-cp .env.example .env
+cp backend/.env.example backend/.env
 # Set ENVIRONMENT=production, GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json,
 # GDRIVE_SIMULATION_MODE=false, GDRIVE_ROOT_FOLDER_ID, MASTER_API_KEY, JWT_SECRET, etc.
 
@@ -111,13 +114,12 @@ docker compose logs -f
 
 ## Running Tests
 
-The test suite includes comprehensive unit and integration tests executing against real in-memory SQLite instances:
-
+From the `backend/` directory:
 ```bash
-# Run full test suite
+# Full test suite
 pytest -v
 
-# Run with coverage report
+# With coverage report
 pytest --cov=app -v
 ```
 

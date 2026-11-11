@@ -10,8 +10,6 @@ venv
 *.pyo
 requirements-dev.txt
 
-# Frontend and UI
-frontend/
 
 # Testing and coverage
 .pytest_cache

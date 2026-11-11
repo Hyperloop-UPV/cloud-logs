@@ -35,9 +35,18 @@ data/*
 !data/.gitkeep
 credentials/*
 !credentials/.gitkeep
+backend/data/*
+!backend/data/.gitkeep
+backend/credentials/*
+!backend/credentials/.gitkeep
 service_account.json
 service_account*.json
 
 # Other
 AISLOP/
 process/
+
+# Node & Frontend
+node_modules/
+dist/
+.DS_Store

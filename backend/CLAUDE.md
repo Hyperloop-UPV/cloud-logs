@@ -9,24 +9,24 @@ FastAPI service that catalogs Hyperloop UPV telemetry/diagnostic log metadata. B
 ## Commands
 
 ```bash
-# Setup (no venv is checked in; deps are not installed system-wide)
+# Setup (from backend/ directory; deps not installed system-wide)
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt        # includes requirements.txt + pytest
 
-# Dev server (http://localhost:8000/docs, /redoc, /api/v1/health)
+# Dev server (from backend/ directory; http://localhost:8000/docs, /redoc, /api/v1/health)
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# Tests
+# Tests (from backend/ directory)
 pytest -v
 pytest --cov=app -v
 pytest tests/test_logs.py -v                                   # one file
 pytest tests/test_logs.py::TestLogsAPI::test_<name> -v         # one test
 pytest -k "refresh" -v                                         # by name
 
-# Lint (ruff is in requirements-dev.txt and configured in pyproject.toml)
+# Lint (from backend/ directory)
 ruff check . && ruff format --check .
 
-# Production
+# Production (from repository root)
 docker compose up -d --build && docker compose logs -f
 ```
 
@@ -71,9 +71,9 @@ Refresh tokens are opaque random strings stored as SHA-256 hashes with a `family
 - **`ruff` lint config** ignores `B008`/`TRY002` and whitelists `Depends`/`Query`/`require_permission` as immutable calls — keep dependency defaults in signatures.
 - **Tests use stdlib `unittest`**, not pytest fixtures, and there is no `conftest.py`. Two patterns: `TestCase` + `TestClient` with `app.dependency_overrides` pointing at `AsyncMock` DB sessions (`test_logs.py`, `test_auth.py`, `test_users.py`), and `IsolatedAsyncioTestCase` creating a fresh in-memory SQLite engine per test (`test_sqlite_integration.py`). Always `app.dependency_overrides.clear()` in teardown.
 - **`CLEANUP_ENABLED` / `CLEANUP_INTERVAL_HOURS` are read but unused.** The README and `docs/ARCHITECTURE.md` describe a `weekly_cleanup_loop` background worker; no such task exists in the code. `execute_cleanup` is only reachable through `POST /api/v1/logs/cleanup` (admin, supports `dryRun`). Starting that loop in `lifespan` is unimplemented work, not a regression to hunt for.
-- **Deployment runs a single uvicorn worker** behind nginx (see `docs/nginx.conf.example`) because SQLite plus in-process Drive token/folder caches assume one process. `/docs`, `/redoc`, and `/openapi.json` are hand-rolled in `main.py` with relative URLs so they survive a reverse-proxy prefix.
+- **Deployment runs a single uvicorn worker** behind nginx (see `../docs/nginx.conf.example`) because SQLite plus in-process Drive token/folder caches assume one process. `/docs`, `/redoc`, and `/openapi.json` are hand-rolled in `main.py` with relative URLs so they survive a reverse-proxy prefix.
 - Secrets live in `.env` (gitignored) and `credentials/service_account.json`; `data/` and `credentials/` contents are gitignored except `.gitkeep`.
 
 ## Reference docs
 
-`docs/ARCHITECTURE.md` — sequence diagrams, ER schema, RBAC matrix, Drive hierarchy. `docs/API_FRONTEND.md` — endpoint-by-endpoint REST reference with camelCase payloads, written for frontend/control-tool clients. Keep both in sync when changing the API surface.
+`../docs/ARCHITECTURE.md` — sequence diagrams, ER schema, RBAC matrix, Drive hierarchy. `../docs/API_FRONTEND.md` — endpoint-by-endpoint REST reference with camelCase payloads, written for frontend/control-tool clients. Keep both in sync when changing the API surface.

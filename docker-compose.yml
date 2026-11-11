@@ -1,7 +1,7 @@
 services:
   cloud-logs:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     image: hyperloop-cloud-logs:latest
     container_name: cloud_logs_api
@@ -32,9 +32,9 @@ services:
       - CLEANUP_INTERVAL_HOURS=${CLEANUP_INTERVAL_HOURS:-168}
     volumes:
       # Persistent SQLite database directory on VPS host
-      - ./data:/app/data
+      - ./backend/data:/app/data
       # Google Drive service account credentials file
-      - ./credentials:/app/credentials:ro
+      - ./backend/credentials:/app/credentials:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
