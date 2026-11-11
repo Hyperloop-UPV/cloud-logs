@@ -40,17 +40,17 @@ cloud-logs/
 ## Architecture Overview
 
 ```mermaid
-graph TD
-    Client["Pod / Control Station / CI"] -->|1. Initiate Upload| API["Backend API (FastAPI)"]
-    API -->|Generate Session| GDrive[("Google Drive Storage<br/>(YYYY_MM monthly archives)")]
-    Client -->|2. Direct Binary Transfer (ZIP)| GDrive
-    Client -->|3. Complete Upload| API
-    API -->|Verify Size & Hash| GDrive
-    API -->|Store Metadata| SQLite[("SQLite Database<br/>(aiosqlite + WAL)")]
+flowchart TD
+    Client["Pod / Control Station / CI"] -->|"1. Initiate Upload"| API["Backend API (FastAPI)"]
+    API -->|"Generate Session"| GDrive[("Google Drive Storage<br/>YYYY_MM monthly archives")]
+    Client -->|"2. Direct Binary Transfer (ZIP)"| GDrive
+    Client -->|"3. Complete Upload"| API
+    API -->|"Verify Size & Hash"| GDrive
+    API -->|"Store Metadata"| SQLite[("SQLite Database<br/>aiosqlite + WAL")]
 
-    Browser["Web Browser (Operator)"] -->|HTTP / SPA| Frontend["Frontend UI (React 19 + Vite)"]
-    Frontend -->|REST API Calls| API
-    Browser -->|Direct Download (HTTP 307)| GDrive
+    Browser["Web Browser (Operator)"] -->|"HTTP / SPA"| Frontend["Frontend UI (React 19 + Vite)"]
+    Frontend -->|"REST API Calls"| API
+    Browser -->|"Direct Download (HTTP 307)"| GDrive
 ```
 
 - **Decoupled Binary Storage**: Large telemetry archives (`.zip`) stream directly between clients and Google Drive. The API server brokers sessions and verifies integrity without storing large binaries on host disks.
