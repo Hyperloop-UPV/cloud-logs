@@ -142,7 +142,11 @@ export function TeamPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
-  const users = useQuery({ queryKey: ["users"], queryFn: listUsers });
+  const users = useQuery({
+    queryKey: ["users"],
+    queryFn: listUsers,
+    enabled: isAdmin,
+  });
 
   const changeRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: Role }) =>
@@ -238,6 +242,13 @@ export function TeamPage() {
                                   promote &&
                                   !window.confirm(
                                     `Make ${row.username} an administrator? They will be able to edit any log and manage the team.`,
+                                  )
+                                )
+                                  return;
+                                if (
+                                  !promote &&
+                                  !window.confirm(
+                                    `Revoke admin role from ${row.username}? They will only be able to edit their own logs.`,
                                   )
                                 )
                                   return;

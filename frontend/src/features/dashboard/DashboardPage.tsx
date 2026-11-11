@@ -85,12 +85,17 @@ export function DashboardPage() {
         sortBy: "createdAt",
         sortOrder: "desc",
       }),
+    enabled: !stats.data?.recentUploads,
   });
 
   const data = stats.data;
-  const attention = data
-    ? (data.byStatus.pending_upload ?? 0) + (data.byStatus.failed ?? 0)
-    : undefined;
+  const attention =
+    data?.needsAttention ??
+    (data
+      ? (data.byStatus.pending_upload ?? 0) +
+        (data.byStatus.failed ?? 0) +
+        (data.byStatus.aborted ?? 0)
+      : undefined);
 
   return (
     <>
@@ -167,10 +172,10 @@ export function DashboardPage() {
             <div className="lg:col-span-2">
               <Panel title="Recent uploads">
                 <RecentActivity
-                  logs={recent.data?.items ?? []}
-                  isPending={recent.isPending}
+                  logs={data?.recentUploads ?? recent.data?.items ?? []}
+                  isPending={!data?.recentUploads && recent.isPending}
                   error={recent.isError ? recent.error : undefined}
-                  onRetry={() => void recent.refetch()}
+                  onRetry={() => void (stats.refetch(), recent.refetch())}
                 />
               </Panel>
             </div>

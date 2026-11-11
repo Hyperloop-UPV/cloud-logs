@@ -32,24 +32,31 @@ export default function AuthCallback() {
         setFailure(
           err instanceof Error
             ? err.message
-            : "No se pudo completar el acceso.",
+            : "Authentication could not be completed.",
         );
       }
     })();
   }, [code, state, navigate, adoptSession]);
 
   return (
-    <main className="mx-auto max-w-md px-6 py-24">
+    <main className="mx-auto max-w-md px-6 py-24 text-center">
       {error ? (
         <>
-          <h1 className="text-xl">No se pudo entrar</h1>
-          <p className="text-ink-soft mt-2">{error}</p>
-          <a className="text-accent mt-4 inline-block underline" href="/">
-            Volver a intentarlo
+          <h1 className="text-foreground text-xl font-semibold">
+            Sign-in failed
+          </h1>
+          <p className="text-muted-foreground mt-2 text-sm">{error}</p>
+          <a
+            className="text-primary mt-4 inline-block text-sm hover:underline"
+            href="/"
+          >
+            Try again
           </a>
         </>
       ) : (
-        <p className="text-ink-soft">Validando el acceso con GitHub…</p>
+        <p className="text-muted-foreground text-sm">
+          Validating GitHub authentication…
+        </p>
       )}
     </main>
   );

@@ -21,7 +21,7 @@ import {
   formatAxisValue,
   readThemeColors,
 } from "../../constants/chartConfig";
-import { formatMonthKey, monthKeyToRange } from "../../lib/format";
+import { formatMonthKey } from "../../lib/format";
 
 interface MonthlyVolumeChartProps {
   byFolder: Record<string, number>;
@@ -54,9 +54,7 @@ export function MonthlyVolumeChart({
     onBarClick.current = (index: number) => {
       const key = months[index];
       if (!key) return;
-      const range = monthKeyToRange(key);
-      if (!range) return;
-      navigate(`/catalog?from=${range.from}&to=${range.to}`);
+      navigate(`/catalog?folder=${encodeURIComponent(key)}`);
     };
   });
 

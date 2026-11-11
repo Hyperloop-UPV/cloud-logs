@@ -64,7 +64,7 @@ export function UploadPage() {
         note: note || null,
         startDate: toIso(start),
         endDate: toIso(end),
-        fileDate: null,
+        fileDate: toIso(start) ?? toIso(end) ?? null,
         fileHash: null,
         clientMetadata: {},
       },

@@ -21,7 +21,11 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (status === "anonymous") {
     return (
-      <Navigate to="/signin" replace state={{ from: location.pathname }} />
+      <Navigate
+        to="/signin"
+        replace
+        state={{ from: `${location.pathname}${location.search}` }}
+      />
     );
   }
 
