@@ -7,7 +7,14 @@ export const EMPTY = "—";
 
 /** Tamano de archivo legible. Base 1024, porque el API cuenta bytes reales. */
 export function formatBytes(bytes: number | null | undefined): string {
-  if (bytes === null || bytes === undefined) return EMPTY;
+  if (
+    bytes === null ||
+    bytes === undefined ||
+    bytes < 0 ||
+    Number.isNaN(bytes)
+  ) {
+    return EMPTY;
+  }
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB", "TB"];
   const exponent = Math.min(
@@ -122,6 +129,8 @@ export function formatRelative(iso: string | null | undefined): string {
   }
   return formatDate(iso);
 }
+
+export const formatRelativeTime = formatRelative;
 
 const number = new Intl.NumberFormat("en");
 

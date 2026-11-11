@@ -102,6 +102,14 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
+export function setAccessToken(token: string, expiresInSeconds = 900): void {
+  setSession(token, expiresInSeconds);
+}
+
+export function clearAccessToken(): void {
+  clearSession();
+}
+
 /** La capa de auth registra aquí su reacción a una sesión irrecuperable. */
 export function setUnauthenticatedHandler(fn: (() => void) | null): void {
   onUnauthenticated = fn;
@@ -170,6 +178,8 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   query?: Record<string, unknown>;
   /** No intentar refresh ni reintento ante un 401 (para los propios endpoints de auth). */
   skipAuthRetry?: boolean;
+  /** Clave maestra opcional enviada en la cabecera X-API-Key. */
+  apiKey?: string;
 }
 
 function buildUrl(path: string, query?: Record<string, unknown>): string {
@@ -188,7 +198,14 @@ export async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { json, query, skipAuthRetry = false, headers, ...init } = options;
+  const {
+    json,
+    query,
+    skipAuthRetry = false,
+    apiKey,
+    headers,
+    ...init
+  } = options;
 
   // Refresh proactivo: evita el 401 cuando el token está a punto de caducar.
   if (
@@ -207,6 +224,7 @@ export async function request<T>(
       headers: {
         ...(json !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(apiKey ? { "X-API-Key": apiKey } : {}),
         ...headers,
       },
       ...(json !== undefined ? { body: JSON.stringify(json) } : {}),
