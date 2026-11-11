@@ -42,6 +42,8 @@ export interface Log {
   creator: string;
   createdAt: string;
   completedAt: string | null;
+  /** Duración en segundos calculada automáticamente por el backend. */
+  duration?: number | null;
 }
 
 export interface LogPage {
@@ -55,8 +57,7 @@ export type SortBy =
   "createdAt" | "fileDate" | "startDate" | "endDate" | "fileName" | "fileSize";
 export type SortOrder = "asc" | "desc";
 
-/** Filtros de GET /logs. Ojo: startDate/endDate filtran logs *contenidos* en la ventana,
- *  no los que la solapan (Log.start_date >= startDate AND Log.end_date <= endDate). */
+/** Filtros de GET /logs. startDate/endDate filtran logs cuyo intervalo solapa la ventana. */
 export interface LogQuery {
   page?: number;
   pageSize?: number;
@@ -69,7 +70,7 @@ export interface LogQuery {
   creator?: string;
   sortBy?: SortBy;
   sortOrder?: SortOrder;
-  /** Solo admin: el backend devuelve 403 a usuarios normales. */
+  /** Búsqueda textual sobre campos de clientMetadata (disponible para todos los miembros autenticados). */
   metadataQuery?: string;
 }
 
@@ -121,6 +122,34 @@ export interface TagCount {
   count: number;
 }
 
+export interface MonthlyUploadStats {
+  month: string;
+  count: number;
+  totalBytes: number;
+}
+
+export interface TagCoOccurrence {
+  tag: string;
+  count: number;
+}
+
+export interface TagDetailOut {
+  tag: string;
+  logs: number;
+  totalSize: number;
+  averageSize: number;
+  statusMix: Record<string, number>;
+  firstUsed: string | null;
+  lastUsed: string | null;
+  usedWith: TagCoOccurrence[];
+}
+
+export interface TagsStatsResponse {
+  totalTags: number;
+  totalSize: number;
+  tags: TagDetailOut[];
+}
+
 export interface LogStats {
   totalLogs: number;
   totalBytes: number;
@@ -128,6 +157,10 @@ export interface LogStats {
   byFolder: Record<string, number>;
   totalTags: number;
   topTags: TagCount[];
+  needsAttention?: number;
+  uploadsPerMonth?: MonthlyUploadStats[];
+  recentUploads?: Log[];
+  tagDetails?: TagDetailOut[];
 }
 
 export interface CleanupResult {

@@ -90,6 +90,7 @@ export function uploadLog(
       throw new DOMException("Subida cancelada", "AbortError");
     }
 
+    let completed = false;
     try {
       const driveFileId = await putToDrive(
         session.uploadUrl,
@@ -99,16 +100,20 @@ export function uploadLog(
           xhr = x;
         },
       );
+      completed = true;
       return await completeUpload(session.id, {
         driveFileId,
         fileHash: metadata.fileHash ?? null,
       });
     } catch (error) {
-      // Dejar el log colgado en pending_upload ensucia el catálogo; lo marcamos.
-      await abortUpload(
-        session.id,
-        cancelReason ?? "Fallo en la transferencia",
-      ).catch(() => {});
+      // Si el fallo ocurrió durante completeUpload, el backend ya marcó el log como "failed".
+      // Solo abortamos si la transferencia por red no llegó a completarse.
+      if (!completed) {
+        await abortUpload(
+          session.id,
+          cancelReason ?? "Fallo en la transferencia",
+        ).catch(() => {});
+      }
       throw error;
     }
   })();

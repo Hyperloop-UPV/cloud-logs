@@ -98,6 +98,10 @@ export function hasSession(): boolean {
   return accessToken !== null;
 }
 
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 /** La capa de auth registra aquí su reacción a una sesión irrecuperable. */
 export function setUnauthenticatedHandler(fn: (() => void) | null): void {
   onUnauthenticated = fn;
@@ -150,8 +154,7 @@ export function refreshSession(): Promise<string | null> {
       setSession(data.accessToken, data.expiresIn);
       return data.accessToken;
     } catch {
-      clearSession();
-      onUnauthenticated?.();
+      // Un fallo de red transitorio (offline, caída temporal) no debe borrar la sesión ni expulsar al usuario.
       return null;
     } finally {
       refreshInFlight = null;

@@ -1,6 +1,6 @@
 /** Endpoints del API, uno por operación. Sin estado: la sesión la gestiona client.ts. */
 
-import { request, setSession } from "./client";
+import { ApiError, getAccessToken, request, setSession } from "./client";
 import type {
   CleanupResult,
   GitHubAuthUrl,
@@ -15,6 +15,7 @@ import type {
   LogStats,
   LogUpdateRequest,
   Role,
+  TagsStatsResponse,
   TokenResponse,
   User,
 } from "./types";
@@ -73,8 +74,20 @@ export function getMe(): Promise<User> {
   return request<User>("/auth/me");
 }
 
-export function getHealth(): Promise<Health> {
-  return request<Health>("/health", { skipAuthRetry: true });
+export async function getHealth(): Promise<Health> {
+  try {
+    return await request<Health>("/health", { skipAuthRetry: true });
+  } catch (err) {
+    if (
+      err instanceof ApiError &&
+      err.status === 503 &&
+      err.body &&
+      typeof err.body === "object"
+    ) {
+      return err.body as Health;
+    }
+    throw err;
+  }
 }
 
 /* ---------- logs ---------- */
@@ -89,6 +102,10 @@ export function getLog(id: string): Promise<Log> {
 
 export function listTags(): Promise<string[]> {
   return request<string[]>("/logs/tags");
+}
+
+export function getTagsStats(): Promise<TagsStatsResponse> {
+  return request<TagsStatsResponse>("/logs/tags/stats");
 }
 
 export function getStats(): Promise<LogStats> {
@@ -132,9 +149,12 @@ export function deleteLog(id: string): Promise<void> {
   return request<void>(`/logs/${id}`, { method: "DELETE" });
 }
 
-/** La descarga es un 307 a Google Drive: hay que navegar, no hacer fetch (CORS). */
+/** La descarga es un 307 a Google Drive: adjuntamos token si está disponible para autorizar la navegación. */
 export function downloadUrl(id: string): string {
-  return `/api/v1/logs/${id}/download`;
+  const token = getAccessToken();
+  return token
+    ? `/api/v1/logs/${id}/download?token=${encodeURIComponent(token)}`
+    : `/api/v1/logs/${id}/download`;
 }
 
 /* ---------- admin ---------- */
