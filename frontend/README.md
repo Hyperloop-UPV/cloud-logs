@@ -5,6 +5,9 @@ of the Hyperloop UPV pod. A single-page app that talks to the FastAPI service in
 this repository and adds nothing of its own — there is no frontend server, no
 database and no session state beyond the browser.
 
+Part of the `cloud-logs` monorepo architecture (`frontend/` for the web UI and
+`backend/` for the FastAPI service).
+
 React 19 · Vite · TypeScript · Tailwind v4 through
 [`@hyperloopupv/frontend-kit`](https://github.com/Hyperloop-UPV) · TanStack Query ·
 React Router 7.
@@ -15,12 +18,16 @@ React Router 7.
 
 The frontend needs the API running: on its own it has nothing to show.
 
+In the monorepo architecture, the backend is located in `backend/` and the frontend in `frontend/`.
+
 ```bash
-# 1. The backend, from the repository root
-source .venv/bin/activate
+# 1. The backend, located in backend/
+cd backend
+source ../.venv/bin/activate
 uvicorn app.main:app --reload --port 8000
 
-# 2. The frontend, from this folder
+# 2. The frontend, from frontend/
+cd ../frontend
 npm install
 npm run dev            # http://localhost:5173
 ```
@@ -53,7 +60,7 @@ Two ways in, and for day-to-day development the second is far less trouble.
 
 **GitHub OAuth** is the real path. It needs `GITHUB_CLIENT_ID`,
 `GITHUB_CLIENT_SECRET` and `GITHUB_REDIRECT_URI` configured in the backend's
-`.env` and in the GitHub OAuth App, and your account must belong to the
+`.env` (`backend/.env`) and in the GitHub OAuth App, and your account must belong to the
 organisation named in `GITHUB_ORG_NAME`.
 
 > **The redirect URI points at the app, not at the API.** This SPA handles the
@@ -200,9 +207,9 @@ subpath. Serving it elsewhere needs `base` in `vite.config.ts`.
 ### Serving it from FastAPI
 
 The chosen option. **This is a backend change and is not applied here** — the
-frontend is ready for it; the snippet below is for whoever owns `app/`.
+frontend is ready for it; the snippet below is for whoever owns `backend/app/`.
 
-It goes at the very end of `app/main.py`, after
+It goes at the very end of `backend/app/main.py`, after
 `app.include_router(api_router, prefix="/api/v1")`. Order matters: routes
 declared earlier win, so the catch-all cannot swallow `/api/v1/*`, `/docs`,
 `/redoc`, `/openapi.json` or `/health`.
@@ -213,7 +220,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 
 if FRONTEND_DIST.is_dir():
     # Hashed filenames, so they can be cached hard.
@@ -235,14 +242,14 @@ if FRONTEND_DIST.is_dir():
 Three things to decide while applying it:
 
 - **`GET /` is already taken** by the service-identity endpoint
-  (`app/main.py:128`), and a declared route wins over the catch-all. Visiting the
+  (`backend/app/main.py:128`), and a declared route wins over the catch-all. Visiting the
   domain root would return that JSON instead of the app. Either remove it, or
   move it to something like `/api`.
 - **`index.html` must not be cached**, or people keep running an old build after
   a deploy. The files under `/assets` carry a content hash in the name and can be
   cached forever. The snippet sets no cache headers; add them where the reverse
   proxy lives.
-- **The container only copies `app/`.** The root `Dockerfile` would need the
+- **The container only copies `backend/` (or `backend/app/`).** The `backend/Dockerfile` would need the
   built `dist/` inside the image, either by building the frontend in an earlier
   stage or by copying a prebuilt `dist/`.
 

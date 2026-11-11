@@ -1,7 +1,7 @@
 # CLAUDE.md — frontend
 
-Guía para trabajar en el frontend de `cloud-logs`. Lo general del backend está en el
-`CLAUDE.md` de la raíz.
+Guía para trabajar en el frontend de `cloud-logs`. Lo general del backend está en
+`backend/CLAUDE.md`.
 
 ## Qué es
 
@@ -205,7 +205,7 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
 - **Solo un canal de la traza es de marca.** El color saturado significa estado y
   el naranja se reserva para marca y acción primaria; varias trazas naranjas se
   leerían como medidas.
-- **`/api/v1/health` es público** (`app/main.py:139`, sin dependencia de auth) y
+- **`/api/v1/health` es público** (`backend/app/main.py:139`, sin dependencia de auth) y
   `getHealth()` ya va con `skipAuthRetry`. Por eso el acceso puede decir si el API
   responde antes de que nadie pulse nada, sin tocar el backend.
 - **Borrar es blando en el backend y el diálogo lo dice.** `DELETE /logs/{id}`
@@ -335,7 +335,7 @@ Lo que hay que saber de la segunda, porque no es simétrica con la primera:
 - **`/users/me` responde 401** con master key («User profile not available for
   system callers»): no hay fila de usuario detrás. La identidad se sintetiza en
   `AuthContext.tsx` (`MASTER_USER`), copiando el UUID de ceros y el nombre
-  `master_api_key` que usa `app/dependencies.py::get_current_user`, para que la
+  `master_api_key` que usa `backend/app/dependencies.py::get_current_user`, para que la
   interfaz y los logs del servidor digan lo mismo. **No llames a `getMe()` en modo
   master.**
 - La validación previa es `GET /users?pageSize=1`: es de solo-admin, así que un 200
@@ -349,7 +349,7 @@ Lo que hay que saber de la segunda, porque no es simétrica con la primera:
 
 ## Login en desarrollo
 
-El SPA recibe el callback de GitHub, así que en el `.env` del backend y en la OAuth App
+El SPA recibe el callback de GitHub, así que en el `.env` del backend (`backend/.env`) y en la OAuth App
 hace falta:
 
 ```
