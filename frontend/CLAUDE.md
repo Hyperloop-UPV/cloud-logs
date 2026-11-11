@@ -82,13 +82,13 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   fichero con los acentos bien.
 - **`PlainHeader` acepta hijos** además de `label`, que es como la cabecera lleva la
   casilla de «seleccionar todo» sin duplicar el componente.
-- **El API no agrega por etiqueta.** `/logs/tags` devuelve solo nombres y
-  `stats.topTags` son los diez primeros con el número de logs y nada más. Todo lo
-  que enseña `/tags` —bytes, fechas, reparto por estado, co-ocurrencia— lo calcula
-  `features/tags/useTagAggregate.ts` paginando `/logs` (tope `pageSize=100`). Está
-  **acotado a 20 páginas** y, si corta, la pantalla lo dice: enseñar cifras
-  parciales como si fueran el total es mentir sobre el archivo. Si algún día se
-  añade un `GET /logs/tags/stats`, este hook es lo que hay que sustituir.
+- **Agregados de etiquetas vía `GET /api/v1/logs/tags/stats`.** Anteriormente el
+  API no agregaba por etiqueta y el cliente calculaba las estadísticas paginando
+  hasta 20 páginas de `/logs`. Ahora el endpoint `GET /api/v1/logs/tags/stats` está
+  disponible y es consumido por `features/tags/useTagAggregate.ts`, proporcionando
+  totales exactos (bytes, fechas, reparto por estado y co-ocurrencia). El hook
+  solamente pagina `/logs` (hasta 20 páginas) para obtener los registros que
+  alimentan los nodos individuales del grafo en `/graph`.
 - **El grafo de etiquetas usa `react-force-graph-2d`** (d3-force sobre canvas),
   no una simulación propia: lo que hace buena a esta vista es la interacción
   —arrastrar, hacer zoom, desplazarse— y eso es justo lo que se rompe al

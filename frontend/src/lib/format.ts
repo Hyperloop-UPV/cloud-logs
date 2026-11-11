@@ -144,19 +144,3 @@ export function formatMonthKey(key: string): string {
     year: "numeric",
   }).format(date);
 }
-
-/** Rango ISO que cubre entero un mes "YYYY_MM", para enlazar al catalogo filtrado. */
-export function monthKeyToRange(
-  key: string,
-): { from: string; to: string } | null {
-  const match = /^(\d{4})_(\d{2})$/.exec(key);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const lastDay = new Date(year, month, 0).getDate();
-  return {
-    from: `${year}-${pad(month)}-01`,
-    to: `${year}-${pad(month)}-${pad(lastDay)}`,
-  };
-}

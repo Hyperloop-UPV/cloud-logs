@@ -15,8 +15,6 @@ import type { LucideIcon } from "@hyperloopupv/frontend-kit/icons";
 import { cn } from "@hyperloopupv/frontend-kit/lib";
 import type { ReactNode, RefObject } from "react";
 
-export type SortDir = "asc" | "desc";
-
 /**
  * Resalta *todas* las coincidencias de la busqueda dentro de un texto. Marcar solo
  * la primera hacia pensar que el resto no casaban.
@@ -122,7 +120,7 @@ export function SortableHeader<K extends string>({
   label: string;
   col: K;
   sortKey: K;
-  sortDir: SortDir;
+  sortDir: "asc" | "desc";
   onSort: (col: K) => void;
   align?: "left" | "right";
   className?: string;
@@ -188,43 +186,6 @@ export function PlainHeader({
     >
       {children ?? label}
     </th>
-  );
-}
-
-/**
- * Chip de filtro con contador. Lo inactivo se señala bajando la opacidad, nunca
- * cambiando de color, para que el color solo signifique dato.
- */
-export function FilterChip({
-  label,
-  active,
-  count,
-  onClick,
-  activeClassName,
-}: {
-  label: string;
-  active: boolean;
-  count?: number;
-  onClick: () => void;
-  activeClassName?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all",
-        active
-          ? (activeClassName ?? "border-primary/40 bg-primary/10 text-primary")
-          : "border-border text-muted-foreground opacity-50 hover:opacity-80",
-      )}
-    >
-      {label}
-      {count !== undefined && (
-        <span className="tabular-nums opacity-70">{count}</span>
-      )}
-    </button>
   );
 }
 

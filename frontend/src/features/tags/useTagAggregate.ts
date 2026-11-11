@@ -37,27 +37,6 @@ export interface TagAggregateResult {
   untagged: number;
 }
 
-/** Aristas del grafo: un par por cada dos etiquetas que comparten algun log. */
-export function coOccurrenceEdges(
-  tags: TagAggregate[],
-): { source: string; target: string; weight: number }[] {
-  const seen = new Set<string>();
-  const edges: { source: string; target: string; weight: number }[] = [];
-  for (const entry of tags) {
-    for (const [other, weight] of entry.coOccurring) {
-      // El mapa es simetrico, asi que cada par aparece dos veces.
-      const key =
-        entry.tag < other
-          ? `${entry.tag}\u0000${other}`
-          : `${other}\u0000${entry.tag}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ source: entry.tag, target: other, weight });
-    }
-  }
-  return edges;
-}
-
 export function useTagAggregate() {
   return useQuery({
     queryKey: ["tagAggregate"],

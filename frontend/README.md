@@ -158,10 +158,12 @@ way, with the reason each rule exists. Worth reading before a non-trivial change
 camelCase payloads, query parameters and examples. Two consequences shape this
 app and are not obvious from the screens:
 
-- **There is no per-tag aggregate endpoint.** `/tags` and `/graph` build their
-  numbers in the browser by paging `/logs`, capped at 2 000 logs. When the scan
-  is cut short the screen says so rather than present partial figures as totals.
-  A `GET /logs/tags/stats` would remove the scan.
+- **Tag statistics are aggregated on the server via `GET /api/v1/logs/tags/stats`.**
+  Previously the API did not aggregate tags and the client had to paginate up to 20
+  pages of `/logs`. Now `GET /api/v1/logs/tags/stats` is available and consumed by
+  `useTagAggregate.ts`, providing exact totals (bytes, dates, status breakdown, and
+  co-occurrences). The hook only paginates `/logs` (up to 2,000 logs) to supply
+  individual nodes for the interactive graph in `/graph`.
 - **Deletion is soft and cannot be undone from here.** `DELETE /logs/{id}` sets
   `deleted_at`; the row stays in SQLite and the archive in Drive is untouched. No
   endpoint can read or restore a deleted log, so there is no trash screen. That
