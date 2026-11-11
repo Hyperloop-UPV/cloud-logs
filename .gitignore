@@ -14,8 +14,15 @@ venv/
 # Testing & Coverage
 .pytest_cache/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 .ruff_cache/
+.mypy_cache/
+
+# IDE & Editors
+.vscode/
+.idea/
 
 # SQLite databases & persistent volume directories
 *.db

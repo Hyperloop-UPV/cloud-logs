@@ -23,7 +23,7 @@ pytest tests/test_logs.py -v                                   # one file
 pytest tests/test_logs.py::TestLogsAPI::test_<name> -v         # one test
 pytest -k "refresh" -v                                         # by name
 
-# Lint (ruff is configured in pyproject.toml but not in requirements-dev.txt)
+# Lint (ruff is in requirements-dev.txt and configured in pyproject.toml)
 ruff check . && ruff format --check .
 
 # Production

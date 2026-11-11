@@ -8,6 +8,10 @@ venv
 **/__pycache__
 *.py[cod]
 *.pyo
+requirements-dev.txt
+
+# Frontend and UI
+frontend/
 
 # Testing and coverage
 .pytest_cache
@@ -15,7 +19,8 @@ venv
 .mypy_cache
 .coverage
 htmlcov
-tests
+tests/
+pytest.ini
 
 # Local SQLite databases and host volumes
 data
@@ -39,4 +44,6 @@ service_account*.json
 .vscode
 .idea
 docs
+CLAUDE.md
+README.md
 AISLOP

@@ -11,7 +11,7 @@ services:
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - DATABASE_URL=${DATABASE_URL:-sqlite+aiosqlite:////app/data/cloud_logs.db}
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/cloud_logs.db
       - GDRIVE_ROOT_FOLDER_ID=${GDRIVE_ROOT_FOLDER_ID:-}
       - GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json
       - GDRIVE_SIMULATION_MODE=${GDRIVE_SIMULATION_MODE:-false}

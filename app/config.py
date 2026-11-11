@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    database_url: str = "sqlite+aiosqlite:///./cloud_logs.db"
+    database_url: str = "sqlite+aiosqlite:///./data/cloud_logs.db"
     master_api_key: str | None = None
     master_api_key_hash: str | None = None
     jwt_secret: str = "dev-secret-change-in-production-32b"
