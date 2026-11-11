@@ -65,7 +65,7 @@ async def custom_swagger_ui_html(request: Request) -> HTMLResponse:
     return get_swagger_ui_html(
         openapi_url="openapi.json",
         title="Hyperloop UPV - Cloud Logs API Docs",
-        oauth2_redirect_url=app.swagger_ui_oauth2_redirect_url,
+        oauth2_redirect_url=request.app.swagger_ui_oauth2_redirect_url,
     )
 
 
@@ -81,9 +81,9 @@ async def custom_redoc_html(request: Request) -> HTMLResponse:
 @app.get("/openapi.json", include_in_schema=False)
 @app.get("/docs/openapi.json", include_in_schema=False)
 @app.get("/redoc/openapi.json", include_in_schema=False)
-async def proxy_openapi() -> JSONResponse:
+async def proxy_openapi(request: Request) -> JSONResponse:
     """Endpoint serving openapi.json under root, relative and reverse proxy paths."""
-    return JSONResponse(app.openapi())
+    return JSONResponse(request.app.openapi())
 
 
 @app.exception_handler(RequestValidationError)

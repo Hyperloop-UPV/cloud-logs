@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth import RefreshToken
@@ -67,7 +67,11 @@ async def execute_cleanup(
 
     # 3. Clean up expired and revoked refresh tokens
     tokens_stmt = select(RefreshToken).where(
-        (RefreshToken.expires_at < now) | (RefreshToken.is_revoked.is_(True))
+        (RefreshToken.expires_at < cutoff)
+        | (
+            RefreshToken.is_revoked.is_(True)
+            & (func.coalesce(RefreshToken.revoked_at, RefreshToken.created_at) < cutoff)
+        )
     )
     tokens_res = await db.execute(tokens_stmt)
     stale_tokens = tokens_res.scalars().all()

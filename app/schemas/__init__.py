@@ -20,7 +20,11 @@ from app.schemas.log import (
     LogSearchResponse,
     LogStatsResponse,
     LogUpdateRequest,
+    MonthlyUploadStats,
+    TagCoOccurrence,
     TagCount,
+    TagDetailOut,
+    TagsStatsResponse,
 )
 
 __all__ = [
@@ -37,8 +41,12 @@ __all__ = [
     "LogSearchResponse",
     "LogStatsResponse",
     "LogUpdateRequest",
+    "MonthlyUploadStats",
     "RefreshTokenRequest",
+    "TagCoOccurrence",
     "TagCount",
+    "TagDetailOut",
+    "TagsStatsResponse",
     "TokenResponse",
     "UserOut",
     "UserRoleUpdateRequest",

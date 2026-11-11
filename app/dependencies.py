@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -191,7 +192,7 @@ def get_current_user(auth: AuthContext = Depends(get_current_auth)) -> User:
     )
 
 
-def require_permission(permission: str) -> Callable[..., AuthContext]:
+def require_permission(permission: str) -> Callable[..., Coroutine[Any, Any, AuthContext]]:
     """Dependency factory checking that the authenticated caller holds the required permission."""
 
     async def _permission_dependency(

@@ -220,6 +220,8 @@ class TestDependencies(IsolatedAsyncioTestCase):
         with patch.object(settings, "master_api_key_hash", "some_hash"):
             auth = await get_current_auth(request, db)
             self.assertFalse(auth.is_master)
+            self.assertIsNotNone(auth.user)
+            assert auth.user is not None
             self.assertEqual(auth.user.id, user_id)
 
     async def test_get_current_auth_missing_credentials(self):
@@ -436,3 +438,98 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"message": "Logged out successfully"})
         app.dependency_overrides.clear()
+
+
+class TestProductionSettingsValidation(TestCase):
+    def test_development_allows_defaults(self):
+        from app.config import Settings
+
+        s = Settings(
+            environment="development",
+            jwt_secret="dev-secret-change-in-production-32b",
+            master_api_key="hlp_live_supersecret_admin_token_change_in_production",
+            github_org_name=None,
+            allow_public_github_login=False,
+        )
+        self.assertEqual(s.environment, "development")
+
+    def test_production_rejects_insecure_or_short_jwt_secret(self):
+        from app.config import Settings
+
+        # Default insecure secret
+        with self.assertRaises(ValueError) as cm:
+            Settings(
+                environment="production",
+                jwt_secret="supersecret_jwt_key_change_in_production",
+                master_api_key="a_valid_secure_master_api_key_for_testing",
+                github_org_name="Hyperloop-UPV",
+            )
+        self.assertIn("JWT_SECRET must be set to a secure secret", str(cm.exception))
+
+        # Short secret (< 32 chars)
+        with self.assertRaises(ValueError) as cm:
+            Settings(
+                environment="production",
+                jwt_secret="short-secret-less-than-32-chars",
+                master_api_key="a_valid_secure_master_api_key_for_testing",
+                github_org_name="Hyperloop-UPV",
+            )
+        self.assertIn("JWT_SECRET must be set to a secure secret of at least 32 characters", str(cm.exception))
+
+    def test_production_rejects_missing_or_insecure_master_key(self):
+        from app.config import Settings
+
+        # Missing both master_api_key and master_api_key_hash
+        with self.assertRaises(ValueError) as cm:
+            Settings(
+                environment="production",
+                jwt_secret="a" * 32,
+                master_api_key=None,
+                master_api_key_hash=None,
+                github_org_name="Hyperloop-UPV",
+            )
+        self.assertIn("MASTER_API_KEY or MASTER_API_KEY_HASH must be configured", str(cm.exception))
+
+        # Default insecure master key
+        with self.assertRaises(ValueError) as cm:
+            Settings(
+                environment="production",
+                jwt_secret="a" * 32,
+                master_api_key="hlp_live_supersecret_admin_token_change_in_production",
+                github_org_name="Hyperloop-UPV",
+            )
+        self.assertIn("MASTER_API_KEY or MASTER_API_KEY_HASH must be configured", str(cm.exception))
+
+    def test_production_github_org_guard(self):
+        from app.config import Settings
+
+        # Without org and without allow_public_github_login
+        with self.assertRaises(ValueError) as cm:
+            Settings(
+                environment="production",
+                jwt_secret="a" * 32,
+                master_api_key="a_valid_secure_master_api_key_for_testing",
+                github_org_name=None,
+                allow_public_github_login=False,
+            )
+        self.assertIn("GITHUB_ORG_NAME must be specified", str(cm.exception))
+
+        # Allowed when allow_public_github_login is True
+        s = Settings(
+            environment="production",
+            jwt_secret="a" * 32,
+            master_api_key="a_valid_secure_master_api_key_for_testing",
+            github_org_name=None,
+            allow_public_github_login=True,
+        )
+        self.assertTrue(s.allow_public_github_login)
+
+        # Allowed with github_org_name
+        s2 = Settings(
+            environment="production",
+            jwt_secret="a" * 32,
+            master_api_key="a_valid_secure_master_api_key_for_testing",
+            github_org_name="Hyperloop-UPV",
+            allow_public_github_login=False,
+        )
+        self.assertEqual(s2.github_org_name, "Hyperloop-UPV")
