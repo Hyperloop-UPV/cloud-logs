@@ -726,3 +726,198 @@ class TestLogsAPI(TestCase):
         self.assertEqual(data["duration"], 120.0)
         self.assertEqual(sample_log.duration, 120.0)
 
+    def test_search_logs_empty_results(self):
+        """Search query returning 0 results returns empty list and total 0."""
+        self.mock_result.scalar.return_value = 0
+        self.mock_result.scalars.return_value.all.return_value = []
+
+        response = self.client.get(
+            "/api/v1/logs?tags=nonexistent_tag_xyz",
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["total"], 0)
+        self.assertEqual(data["items"], [])
+        self.assertEqual(data["page"], 1)
+        self.assertEqual(data["pageSize"], 50)
+
+    def test_search_logs_pagination_validation_errors(self):
+        """FastAPI query validation rejects negative/zero pages and invalid page sizes."""
+        # page < 1
+        res1 = self.client.get("/api/v1/logs?page=0", headers=self.headers)
+        self.assertEqual(res1.status_code, 422)
+
+        res2 = self.client.get("/api/v1/logs?page=-5", headers=self.headers)
+        self.assertEqual(res2.status_code, 422)
+
+        # pageSize < 1
+        res3 = self.client.get("/api/v1/logs?pageSize=0", headers=self.headers)
+        self.assertEqual(res3.status_code, 422)
+
+        res4 = self.client.get("/api/v1/logs?pageSize=-10", headers=self.headers)
+        self.assertEqual(res4.status_code, 422)
+
+        # pageSize > 100
+        res5 = self.client.get("/api/v1/logs?pageSize=101", headers=self.headers)
+        self.assertEqual(res5.status_code, 422)
+
+    def test_idor_modify_or_delete_log_with_none_created_by_forbidden_for_regular_user(self):
+        """When log has created_by=None, regular users cannot patch, delete, abort, or complete."""
+        target_log = self._create_sample_log(status="pending_upload")
+        target_log.created_by = None
+        self.mock_result.scalar_one_or_none.return_value = target_log
+
+        # PATCH
+        patch_res = self.client.patch(
+            f"/api/v1/logs/{target_log.id}",
+            json={"note": "unauthorized"},
+            headers=self.headers,
+        )
+        self.assertEqual(patch_res.status_code, 403)
+
+        # DELETE
+        delete_res = self.client.delete(
+            f"/api/v1/logs/{target_log.id}",
+            headers=self.headers,
+        )
+        self.assertEqual(delete_res.status_code, 403)
+
+        # ABORT
+        abort_res = self.client.post(
+            f"/api/v1/logs/{target_log.id}/abort",
+            json={"reason": "unauthorized"},
+            headers=self.headers,
+        )
+        self.assertEqual(abort_res.status_code, 403)
+
+        # COMPLETE
+        complete_res = self.client.post(
+            f"/api/v1/logs/{target_log.id}/complete",
+            json={},
+            headers=self.headers,
+        )
+        self.assertEqual(complete_res.status_code, 403)
+
+    def test_idor_modify_log_with_none_created_by_allowed_for_admin_and_master(self):
+        """Admin or Master Key can modify or delete a log even if created_by is None."""
+        target_log = self._create_sample_log(status="ready")
+        target_log.created_by = None
+        self.mock_result.scalar_one_or_none.return_value = target_log
+
+        # 1. Admin PATCH
+        admin_user = User(id=uuid.uuid4(), username="admin_usr", role="admin")
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=admin_user)
+        patch_res = self.client.patch(
+            f"/api/v1/logs/{target_log.id}",
+            json={"note": "admin update"},
+            headers=self.headers,
+        )
+        self.assertEqual(patch_res.status_code, 200)
+
+        # 2. Master Key DELETE
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(is_master=True)
+        delete_res = self.client.delete(
+            f"/api/v1/logs/{target_log.id}",
+            headers=self.headers,
+        )
+        self.assertEqual(delete_res.status_code, 204)
+
+    def test_check_log_modification_permission_function_directly(self):
+        from fastapi import HTTPException
+
+        from app.api.v1.logs import check_log_modification_permission
+
+        owner_id = uuid.uuid4()
+        other_id = uuid.uuid4()
+        log = self._create_sample_log()
+        log.created_by = owner_id
+
+        # None user and not master -> 403
+        with self.assertRaises(HTTPException) as cm:
+            check_log_modification_permission(log, AuthContext(user=None, is_master=False))
+        self.assertEqual(cm.exception.status_code, 403)
+
+        # Different user -> 403
+        other_user = User(id=other_id, username="other", role="user")
+        with self.assertRaises(HTTPException) as cm:
+            check_log_modification_permission(log, AuthContext(user=other_user))
+        self.assertEqual(cm.exception.status_code, 403)
+
+        # Same user -> allowed
+        owner_user = User(id=owner_id, username="owner", role="user")
+        self.assertIsNone(check_log_modification_permission(log, AuthContext(user=owner_user)))
+
+        # Admin user -> allowed
+        admin_user = User(id=other_id, username="admin", role="admin")
+        self.assertIsNone(check_log_modification_permission(log, AuthContext(user=admin_user)))
+
+        # Master key -> allowed
+        self.assertIsNone(check_log_modification_permission(log, AuthContext(is_master=True)))
+
+    def test_complete_upload_sets_file_size(self):
+        """complete_log_upload applies file_size from verification payload when present."""
+        log_id = uuid.uuid4()
+        pending_log = self._create_sample_log(log_id=log_id, status="pending_upload")
+        pending_log.file_size = None
+        self.mock_result.scalar_one_or_none.return_value = pending_log
+
+        mock_gdrive = MagicMock()
+        mock_gdrive.verify_uploaded_file = AsyncMock(
+            return_value={
+                "verified": True,
+                "drive_file_id": "verified_file_id",
+                "drive_url": "https://drive.google.com/file/d/verified_file_id/view",
+                "file_size": 16384,
+            }
+        )
+        app.dependency_overrides[get_gdrive_service] = lambda: mock_gdrive
+
+        response = self.client.post(
+            f"/api/v1/logs/{log_id}/complete",
+            json={"fileHash": "abcdef"},
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(pending_log.file_size, 16384)
+
+    def test_get_tags_stats_with_fallback_dates(self):
+        """compute_monthly_upload_stats falls back to file_date/created_at if drive_folder is invalid or missing."""
+        from app.api.v1.logs import compute_monthly_upload_stats
+
+        log1 = self._create_sample_log(tags=["propulsion"])
+        log1.drive_folder = "corrupted_folder_format"
+        log1.file_date = datetime(2026, 8, 10, 14, 0, 0, tzinfo=UTC)
+
+        log2 = self._create_sample_log(tags=["telemetry"])
+        log2.drive_folder = None
+        log2.file_date = None
+        log2.created_at = datetime(2026, 9, 20, 10, 0, 0, tzinfo=UTC)
+
+        # Log with no dates at all should be skipped
+        log3 = self._create_sample_log(tags=["orphan"])
+        log3.drive_folder = None
+        log3.file_date = None
+        log3.created_at = None
+
+        stats = compute_monthly_upload_stats([log1, log2, log3])
+        folders = [s.folder for s in stats]
+        self.assertIn("2026_08", folders)
+        self.assertIn("2026_09", folders)
+        self.assertEqual(len(stats), 2)
+
+    def test_download_log_missing_drive_url(self):
+        """download_log_file raises 404 if log is ready but has no drive_url."""
+        log_id = uuid.uuid4()
+        ready_log = self._create_sample_log(log_id=log_id, status="ready")
+        ready_log.drive_url = None
+        self.mock_result.scalar_one_or_none.return_value = ready_log
+
+        response = self.client.get(
+            f"/api/v1/logs/{log_id}/download",
+            headers=self.headers,
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Google Drive URL is not available", response.json()["detail"])
+

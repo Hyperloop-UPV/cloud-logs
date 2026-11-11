@@ -200,3 +200,23 @@ class TestUsersAPI(IsolatedAsyncioTestCase):
         )
         self.assertEqual(res.status_code, 400)
         self.assertIn("demote", res.json()["detail"].lower())
+
+    def test_update_user_role_cannot_demote_last_remaining_admin(self):
+        """Master Key cannot demote the last remaining admin."""
+        with patch.object(settings, "master_api_key_hash", self.master_hash):
+            res = self.client.patch(
+                f"/api/v1/users/{self.admin_id}/role",
+                json={"role": "user"},
+                headers=self.master_headers,
+            )
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("Cannot demote the last remaining administrator", res.json()["detail"])
+
+    def test_get_current_user_me_system_caller_without_user(self):
+        """GET /api/v1/users/me returns 401 when context has no user and is not master."""
+        from app.dependencies import AuthContext, get_current_auth
+
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=None, is_master=False)
+        res = self.client.get("/api/v1/users/me")
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("User profile not available for system callers", res.json()["detail"])
