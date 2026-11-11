@@ -30,7 +30,6 @@ Centralized telemetry and diagnostic log metadata catalog service.
   - Aggregated metrics endpoint (`GET /api/v1/logs/stats`) reporting totals, storage size, status breakdown, and top tags.
   - Direct download redirect (`GET /api/v1/logs/{id}/download` -> HTTP 307 to Google Drive).
 - **Automated Catalog Maintenance & Retention Policy**:
-  - Integrated, non-blocking weekly background worker (`weekly_cleanup_loop`) running alongside the API server.
   - Safely soft-deletes uncompleted or orphaned uploads (`pending_upload`, `aborted`, `failed`) older than 30 days (1 month).
   - **Inviolable Archive Guarantee**: Completed telemetry logs (`ready`) are **never deleted or modified**.
   - Manual on-demand endpoint (`POST /api/v1/logs/cleanup`) with dry-run support (`dryRun=true`).

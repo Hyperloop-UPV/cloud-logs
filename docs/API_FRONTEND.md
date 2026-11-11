@@ -39,7 +39,8 @@ Telemetry binaries (e.g., ZIP archives) are **never sent directly through the AP
   "id": "c8b321a0-3841-4cf1-a472-8d76a26d7f01",
   "uploadUrl": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=...",
   "driveFolder": "2026_10",
-  "status": "pending_upload"
+  "status": "pending_upload",
+  "expiresInSeconds": 86400
 }
 ```
 
@@ -102,7 +103,7 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
 - **Optional Query Parameters**:
   - `page`: Page index (e.g., `1`, default: `1`).
   - `pageSize`: Items per page (e.g., `20`, default: `50`, max: `100`).
-  - `sortBy`: Field to order by (`createdAt`, `startDate`, `endDate`, `fileName`, `fileSize`, default: `createdAt`).
+  - `sortBy`: Field to order by (`createdAt`, `fileDate`, `startDate`, `endDate`, `fileName`, `fileSize`, default: `createdAt`).
   - `sortOrder`: Sort direction (`asc` or `desc`, default: `desc`).
   - `textQuery`: Substring search in filenames and notes (e.g., `propulsion`).
   - `tags`: Comma-separated list of required tags (e.g., `pod,bms`).
@@ -139,6 +140,7 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
         "clientUser": "operator_john",
         "runUuid": "550e8400-e29b-41d4-a716-446655440000"
       },
+      "fileDate": "2026-10-23T10:00:00Z",
       "startDate": "2026-10-23T10:00:00Z",
       "endDate": "2026-10-23T10:15:00Z",
       "duration": 900.0,
@@ -159,10 +161,11 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
 - **Path**: `/api/v1/logs/{id}/download`
 - **When to call**: When a user clicks "Download Log" in the dashboard.
 - **Behavior**:
-  - Requires valid authentication token.
+  - Requires valid authentication token (via `Authorization: Bearer <token>`, `X-API-Key`, or `?token=<access_token>` query parameter for direct browser navigations).
   - If the log is in `ready` status, returns an **HTTP 307 Temporary Redirect** pointing directly to the Google Drive asset link.
   - The client or browser follows the redirect to download the binary.
   - If the log is still `pending_upload` or `aborted`, returns `400 Bad Request`.
+  - If the log does not exist or has no Drive URL available, returns `404 Not Found`.
 
 ---
 
@@ -352,6 +355,7 @@ Manually inspects or purges stale uncompleted uploads. Restricted to users with 
   "affectedLogs": 3,
   "orphanedCleaned": 3,
   "softDeletedPurged": 0,
+  "tokensCleaned": 0,
   "cutoffDate": "2026-09-24T10:00:00Z",
   "dryRun": false,
   "message": "Cleanup complete: 3 uncompleted logs soft-deleted."
@@ -411,7 +415,98 @@ Only users with the **`admin`** role or the **Master API Key** can promote or mo
 
 ---
 
-## 11. Common HTTP Status Codes
+## 11. Authentication & Session Endpoints
+
+The service uses GitHub OAuth 2.0 with short-lived JWT access tokens (15 minutes) and rotating refresh tokens (90 days) stored in HttpOnly cookies. Alternatively, systems can use the Master API Key via `Authorization: Bearer <master_key>` or `X-API-Key: <master_key>`.
+
+### 11.1 Initiate GitHub OAuth Login
+- **Method**: `GET`
+- **Path**: `/api/v1/auth/login` (alias: `/api/v1/auth/github/login`)
+- **Query Parameters**:
+  - `redirect` *(bool, optional, default: false)*: When `true`, returns HTTP 307 redirecting browser to GitHub. When `false`, returns JSON.
+- **Sets Cookie**: `oauth_state` (CSRF token, HttpOnly, path `/api/v1/auth`, max-age 600s).
+- **Response Payload (`redirect=false`)**:
+```json
+{
+  "authorizationUrl": "https://github.com/login/oauth/authorize?client_id=...&state=..."
+}
+```
+
+### 11.2 OAuth Callback
+- **Method**: `GET`
+- **Path**: `/api/v1/auth/callback` (alias: `/api/v1/auth/github/callback`)
+- **Query Parameters**:
+  - `code` *(string)*: GitHub temporary authorization code.
+  - `state` *(string)*: CSRF token (must match `oauth_state` cookie).
+- **Sets Cookie**: `refresh_token` (HttpOnly, path `/api/v1/auth`, max-age 90 days).
+- **Response Payload**:
+```json
+{
+  "accessToken": "eyJhbGciOi...",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "refreshToken": "...",
+  "user": {
+    "id": "c2273ae6-239a-4dd8-a5b1-1d92b3442287",
+    "username": "Manel-Romero",
+    "githubUsername": "Manel-Romero",
+    "role": "user",
+    "createdAt": "2026-10-25T11:08:28Z"
+  }
+}
+```
+
+### 11.3 Refresh Access Token
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/refresh`
+- **Behavior**: Single-flight rotation. Rotates refresh token in SQLite and issues fresh access token. Accepts refresh token from HttpOnly cookie, JSON body, or `X-Refresh-Token` header.
+- **Response Payload**: Same as `TokenResponse` above.
+
+### 11.4 Logout
+- **Method**: `POST`
+- **Path**: `/api/v1/auth/logout`
+- **Behavior**: Revokes refresh token in database and clears the refresh cookie.
+- **Response Payload**: `{"message": "Logged out successfully"}`
+
+### 11.5 Current User Profile
+- **Method**: `GET`
+- **Path**: `/api/v1/auth/me`
+- **Response Payload**: `UserOut` object for currently authenticated caller (including synthetic admin profile for Master Key).
+
+---
+
+## 12. Service Health Probes
+
+Public endpoints for container orchestration, load balancers, and frontend status checks (no authentication required).
+
+- **Method**: `GET`
+- **Path**: `/health` or `/api/v1/health`
+- **Healthy Response (`200 OK`)**:
+```json
+{
+  "status": "healthy",
+  "environment": "development",
+  "components": {
+    "database": "healthy"
+  },
+  "timestamp": "2026-11-11T09:30:00Z"
+}
+```
+- **Degraded Response (`503 Service Unavailable`)**:
+```json
+{
+  "status": "degraded",
+  "environment": "development",
+  "components": {
+    "database": "unhealthy: connection timeout"
+  },
+  "timestamp": "2026-11-11T09:30:00Z"
+}
+```
+
+---
+
+## 13. Common HTTP Status Codes
 
 - `200 OK`: Request succeeded.
 - `204 No Content`: Resource deleted successfully.
@@ -421,3 +516,4 @@ Only users with the **`admin`** role or the **Master API Key** can promote or mo
 - `403 Forbidden`: Insufficient permissions (e.g., standard `user` attempting role updates or maintenance `cleanup`).
 - `404 Not Found`: Target UUID does not exist or has been soft-deleted.
 - `422 Unprocessable Content`: Schema validation error for submitted request body or parameters.
+- `503 Service Unavailable`: Database probe failed during health check or Google Drive unavailable.
