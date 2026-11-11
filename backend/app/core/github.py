@@ -119,7 +119,9 @@ async def check_github_org_membership(
     }
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        response = await client.get("https://api.github.com/user/orgs?per_page=100", headers=headers)
+        response = await client.get(
+            "https://api.github.com/user/orgs?per_page=100", headers=headers
+        )
 
     if response.status_code != 200:
         logger.warning(

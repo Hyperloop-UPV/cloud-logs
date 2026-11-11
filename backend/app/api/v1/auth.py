@@ -163,9 +163,7 @@ async def callback(
     raw_refresh = generate_random_token(48)
     token_hash = hash_token(raw_refresh)
     family_id = uuid.uuid4()
-    expires_at = datetime.now(UTC) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
+    expires_at = datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
 
     db_refresh = RefreshToken(
         user_id=user.id,

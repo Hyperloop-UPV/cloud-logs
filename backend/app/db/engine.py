@@ -13,6 +13,7 @@ if settings.database_url.startswith("sqlite"):
 engine = create_async_engine(settings.database_url, **engine_kwargs)
 
 if settings.database_url.startswith("sqlite"):
+
     @event.listens_for(engine.sync_engine, "connect")
     def _set_sqlite_pragma(dbapi_connection, connection_record):  # type: ignore[no-untyped-def]
         cursor = dbapi_connection.cursor()
@@ -21,6 +22,7 @@ if settings.database_url.startswith("sqlite"):
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.execute("PRAGMA busy_timeout = 5000")
         cursor.close()
+
 
 async_session_factory = async_sessionmaker(
     bind=engine,

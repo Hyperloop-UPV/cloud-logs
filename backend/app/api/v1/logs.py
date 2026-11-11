@@ -167,7 +167,8 @@ async def complete_log_upload(
         return LogCompleteResponse(
             id=log.id,
             status=log.status,
-            drive_url=log.drive_url or f"https://drive.google.com/file/d/{log.drive_file_id or log.id}/view",
+            drive_url=log.drive_url
+            or f"https://drive.google.com/file/d/{log.drive_file_id or log.id}/view",
             drive_folder=log.drive_folder,
             file_name=log.file_name,
             file_size=log.file_size,
@@ -198,8 +199,13 @@ async def complete_log_upload(
         )
 
     log.status = "ready"
-    log.drive_file_id = verification.get("drive_file_id") or log.drive_file_id or f"gdrive_{log.id}"
-    log.drive_url = verification.get("drive_url") or f"https://drive.google.com/file/d/{log.drive_file_id}/view"
+    log.drive_file_id = (
+        verification.get("drive_file_id") or log.drive_file_id or f"gdrive_{log.id}"
+    )
+    log.drive_url = (
+        verification.get("drive_url")
+        or f"https://drive.google.com/file/d/{log.drive_file_id}/view"
+    )
     if verification.get("file_size") is not None:
         log.file_size = verification["file_size"]
     if payload.file_hash:
@@ -208,7 +214,9 @@ async def complete_log_upload(
 
     await db.commit()
 
-    logger.info("Completed log ID %s successfully; drive URL: %s", log.id, log.drive_url)
+    logger.info(
+        "Completed log ID %s successfully; drive URL: %s", log.id, log.drive_url
+    )
 
     return LogCompleteResponse(
         id=log.id,
@@ -288,17 +296,45 @@ async def abort_log_upload(
 )
 async def search_logs(
     page: int = Query(default=1, ge=1, description="Page number"),
-    page_size: int = Query(default=50, ge=1, le=100, alias="pageSize", description="Items per page"),
-    text_query: str | None = Query(default=None, alias="textQuery", description="Text search in name or notes"),
-    tags: str | None = Query(default=None, description="Comma-separated tags (e.g. 'pod,motor')"),
-    drive_folder: str | None = Query(default=None, alias="driveFolder", description="Filter by YYYY_MM folder"),
-    status_filter: str | None = Query(default=None, alias="status", description="Filter by status ('ready', 'pending_upload', etc.)"),
-    start_date: datetime | None = Query(default=None, alias="startDate", description="Filter logs starting after date"),
-    end_date: datetime | None = Query(default=None, alias="endDate", description="Filter logs ending before date"),
-    creator: str | None = Query(default=None, description="Filter by username of creator"),
-    sort_by: str = Query(default="createdAt", alias="sortBy", description="Sort by: 'createdAt', 'startDate', 'endDate', 'fileName', 'fileSize'"),
-    sort_order: str = Query(default="desc", alias="sortOrder", description="Sort direction: 'asc' or 'desc'"),
-    metadata_query: str | None = Query(default=None, alias="metadataQuery", description="Internal search within clientMetadata"),
+    page_size: int = Query(
+        default=50, ge=1, le=100, alias="pageSize", description="Items per page"
+    ),
+    text_query: str | None = Query(
+        default=None, alias="textQuery", description="Text search in name or notes"
+    ),
+    tags: str | None = Query(
+        default=None, description="Comma-separated tags (e.g. 'pod,motor')"
+    ),
+    drive_folder: str | None = Query(
+        default=None, alias="driveFolder", description="Filter by YYYY_MM folder"
+    ),
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description="Filter by status ('ready', 'pending_upload', etc.)",
+    ),
+    start_date: datetime | None = Query(
+        default=None, alias="startDate", description="Filter logs starting after date"
+    ),
+    end_date: datetime | None = Query(
+        default=None, alias="endDate", description="Filter logs ending before date"
+    ),
+    creator: str | None = Query(
+        default=None, description="Filter by username of creator"
+    ),
+    sort_by: str = Query(
+        default="createdAt",
+        alias="sortBy",
+        description="Sort by: 'createdAt', 'startDate', 'endDate', 'fileName', 'fileSize'",
+    ),
+    sort_order: str = Query(
+        default="desc", alias="sortOrder", description="Sort direction: 'asc' or 'desc'"
+    ),
+    metadata_query: str | None = Query(
+        default=None,
+        alias="metadataQuery",
+        description="Internal search within clientMetadata",
+    ),
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
 ) -> LogSearchResponse:
@@ -326,16 +362,22 @@ async def search_logs(
             conditions.append(cast(Log.tags, String).like(f'%"{t}"%'))
 
     if start_date:
-        conditions.append(func.coalesce(Log.end_date, Log.start_date, Log.file_date) >= start_date)
+        conditions.append(
+            func.coalesce(Log.end_date, Log.start_date, Log.file_date) >= start_date
+        )
 
     if end_date:
-        conditions.append(func.coalesce(Log.start_date, Log.end_date, Log.file_date) <= end_date)
+        conditions.append(
+            func.coalesce(Log.start_date, Log.end_date, Log.file_date) <= end_date
+        )
 
     if creator:
         conditions.append(User.username.ilike(f"%{creator}%"))
 
     if metadata_query:
-        conditions.append(cast(Log.client_metadata, String).ilike(f"%{metadata_query}%"))
+        conditions.append(
+            cast(Log.client_metadata, String).ilike(f"%{metadata_query}%")
+        )
 
     # Sorting resolution
     sort_fields = {
@@ -437,7 +479,9 @@ def compute_tag_details(logs: Sequence[Log]) -> tuple[int, int, list[TagDetailOu
         total_size = sum(log.file_size or 0 for log in tag_logs)
         avg_size = round(total_size / logs_count, 2) if logs_count > 0 else 0.0
 
-        status_counts = collections.Counter(log.status for log in tag_logs if log.status)
+        status_counts = collections.Counter(
+            log.status for log in tag_logs if log.status
+        )
         status_mix = dict(status_counts)
 
         dates = [
@@ -461,10 +505,7 @@ def compute_tag_details(logs: Sequence[Log]) -> tuple[int, int, list[TagDetailOu
                 co_counts[ot] += 1
 
         sorted_co = sorted(co_counts.items(), key=lambda item: (-item[1], item[0]))
-        used_with = [
-            TagCoOccurrence(tag=ot, count=cnt)
-            for ot, cnt in sorted_co[:10]
-        ]
+        used_with = [TagCoOccurrence(tag=ot, count=cnt) for ot, cnt in sorted_co[:10]]
 
         tag_details.append(
             TagDetailOut(
@@ -560,7 +601,9 @@ async def get_tags_stats(
     description="Retrieve list of all distinct tags currently used across logs for frontend autocomplete, or rich stats when detailed=True.",
 )
 async def list_tags(
-    detailed: bool = Query(default=False, description="If true, return detailed tag metrics"),
+    detailed: bool = Query(
+        default=False, description="If true, return detailed tag metrics"
+    ),
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
 ) -> list[str] | TagsStatsResponse:
@@ -600,9 +643,8 @@ async def get_log_stats(
     total_logs = total_res.scalar() or 0
 
     # 2. Total bytes (ready logs)
-    bytes_stmt = (
-        select(func.coalesce(func.sum(Log.file_size), 0))
-        .where(Log.deleted_at.is_(None), Log.status == "ready")
+    bytes_stmt = select(func.coalesce(func.sum(Log.file_size), 0)).where(
+        Log.deleted_at.is_(None), Log.status == "ready"
     )
     bytes_res = await db.execute(bytes_stmt)
     total_bytes = int(bytes_res.scalar() or 0)
@@ -635,8 +677,7 @@ async def get_log_stats(
     )
     total_tags = len(tag_counter)
     top_tags = [
-        TagCount(tag=tag, count=cnt)
-        for tag, cnt in tag_counter.most_common(10)
+        TagCount(tag=tag, count=cnt) for tag, cnt in tag_counter.most_common(10)
     ]
 
     # 6. Needs attention (pending_upload, failed, aborted)
@@ -779,7 +820,10 @@ async def get_log(
 )
 async def download_log(
     id: UUID = Path(..., description="UUID of the log to download"),
-    token: str | None = Query(default=None, description="Optional access token or master key for browser link downloads"),
+    token: str | None = Query(
+        default=None,
+        description="Optional access token or master key for browser link downloads",
+    ),
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
 ) -> RedirectResponse:

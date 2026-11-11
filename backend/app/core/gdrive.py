@@ -86,7 +86,9 @@ class GoogleDriveService:
 
                 client_email = sa_info.get("client_email")
                 private_key = sa_info.get("private_key")
-                token_uri = sa_info.get("token_uri", "https://oauth2.googleapis.com/token")
+                token_uri = sa_info.get(
+                    "token_uri", "https://oauth2.googleapis.com/token"
+                )
 
                 if not client_email or not private_key:
                     raise ValueError(
@@ -135,7 +137,8 @@ class GoogleDriveService:
                 raise
             except (ValueError, KeyError, jwt.PyJWTError, httpx.HTTPError) as e:
                 logger.error(
-                    "Error signing or exchanging Google service account credentials: %s", e
+                    "Error signing or exchanging Google service account credentials: %s",
+                    e,
                 )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,

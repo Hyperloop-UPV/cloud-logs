@@ -44,7 +44,9 @@ class TestLogsAPI(TestCase):
 
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides[get_current_auth] = override_get_current_auth
-        app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(simulation_mode=True)
+        app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
+            simulation_mode=True
+        )
 
     def tearDown(self):
         app.dependency_overrides.clear()
@@ -465,6 +467,7 @@ class TestLogsAPI(TestCase):
             username="admin_user",
             permissions=["admin"],
         )
+
         async def override_get_current_auth_admin():
             return AuthContext(user=admin_user)
 
@@ -495,7 +498,9 @@ class TestLogsAPI(TestCase):
             username="other_engineer",
             role="user",
         )
-        app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=other_user)
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(
+            user=other_user
+        )
 
         # 1. PATCH
         patch_res = self.client.patch(
@@ -504,7 +509,10 @@ class TestLogsAPI(TestCase):
             headers=self.headers,
         )
         self.assertEqual(patch_res.status_code, 403)
-        self.assertIn("You do not have permission to modify or delete this log", patch_res.json()["detail"])
+        self.assertIn(
+            "You do not have permission to modify or delete this log",
+            patch_res.json()["detail"],
+        )
 
         # 2. DELETE
         delete_res = self.client.delete(
@@ -512,7 +520,10 @@ class TestLogsAPI(TestCase):
             headers=self.headers,
         )
         self.assertEqual(delete_res.status_code, 403)
-        self.assertIn("You do not have permission to modify or delete this log", delete_res.json()["detail"])
+        self.assertIn(
+            "You do not have permission to modify or delete this log",
+            delete_res.json()["detail"],
+        )
 
         # 3. ABORT
         abort_res = self.client.post(
@@ -521,7 +532,10 @@ class TestLogsAPI(TestCase):
             headers=self.headers,
         )
         self.assertEqual(abort_res.status_code, 403)
-        self.assertIn("You do not have permission to modify or delete this log", abort_res.json()["detail"])
+        self.assertIn(
+            "You do not have permission to modify or delete this log",
+            abort_res.json()["detail"],
+        )
 
         # 4. COMPLETE
         complete_res = self.client.post(
@@ -530,7 +544,10 @@ class TestLogsAPI(TestCase):
             headers=self.headers,
         )
         self.assertEqual(complete_res.status_code, 403)
-        self.assertIn("You do not have permission to modify or delete this log", complete_res.json()["detail"])
+        self.assertIn(
+            "You do not have permission to modify or delete this log",
+            complete_res.json()["detail"],
+        )
 
     def test_idor_allowed_for_original_creator(self):
         """The original creator can patch, abort, complete, and delete their own log."""
@@ -580,7 +597,9 @@ class TestLogsAPI(TestCase):
             username="admin_reviewer",
             role="admin",
         )
-        app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=admin_user)
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(
+            user=admin_user
+        )
 
         # 1. Admin can PATCH log of another user
         log_to_patch = self._create_sample_log(status="ready")
@@ -709,7 +728,9 @@ class TestLogsAPI(TestCase):
         self.mock_result.scalar.return_value = 0
         self.mock_result.scalars.return_value.all.return_value = []
 
-        res = self.client.get("/api/v1/logs?metadataQuery=test_run", headers=self.headers)
+        res = self.client.get(
+            "/api/v1/logs?metadataQuery=test_run", headers=self.headers
+        )
         self.assertEqual(res.status_code, 200)
 
     def test_duration_with_mixed_naive_aware_timezones(self):
@@ -762,7 +783,9 @@ class TestLogsAPI(TestCase):
         res5 = self.client.get("/api/v1/logs?pageSize=101", headers=self.headers)
         self.assertEqual(res5.status_code, 422)
 
-    def test_idor_modify_or_delete_log_with_none_created_by_forbidden_for_regular_user(self):
+    def test_idor_modify_or_delete_log_with_none_created_by_forbidden_for_regular_user(
+        self,
+    ):
         """When log has created_by=None, regular users cannot patch, delete, abort, or complete."""
         target_log = self._create_sample_log(status="pending_upload")
         target_log.created_by = None
@@ -807,7 +830,9 @@ class TestLogsAPI(TestCase):
 
         # 1. Admin PATCH
         admin_user = User(id=uuid.uuid4(), username="admin_usr", role="admin")
-        app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=admin_user)
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(
+            user=admin_user
+        )
         patch_res = self.client.patch(
             f"/api/v1/logs/{target_log.id}",
             json={"note": "admin update"},
@@ -835,7 +860,9 @@ class TestLogsAPI(TestCase):
 
         # None user and not master -> 403
         with self.assertRaises(HTTPException) as cm:
-            check_log_modification_permission(log, AuthContext(user=None, is_master=False))
+            check_log_modification_permission(
+                log, AuthContext(user=None, is_master=False)
+            )
         self.assertEqual(cm.exception.status_code, 403)
 
         # Different user -> 403
@@ -846,14 +873,20 @@ class TestLogsAPI(TestCase):
 
         # Same user -> allowed
         owner_user = User(id=owner_id, username="owner", role="user")
-        self.assertIsNone(check_log_modification_permission(log, AuthContext(user=owner_user)))
+        self.assertIsNone(
+            check_log_modification_permission(log, AuthContext(user=owner_user))
+        )
 
         # Admin user -> allowed
         admin_user = User(id=other_id, username="admin", role="admin")
-        self.assertIsNone(check_log_modification_permission(log, AuthContext(user=admin_user)))
+        self.assertIsNone(
+            check_log_modification_permission(log, AuthContext(user=admin_user))
+        )
 
         # Master key -> allowed
-        self.assertIsNone(check_log_modification_permission(log, AuthContext(is_master=True)))
+        self.assertIsNone(
+            check_log_modification_permission(log, AuthContext(is_master=True))
+        )
 
     def test_complete_upload_sets_file_size(self):
         """complete_log_upload applies file_size from verification payload when present."""
@@ -920,4 +953,3 @@ class TestLogsAPI(TestCase):
         )
         self.assertEqual(response.status_code, 404)
         self.assertIn("Google Drive URL is not available", response.json()["detail"])
-

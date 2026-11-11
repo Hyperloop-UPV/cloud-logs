@@ -1,4 +1,4 @@
-"""Unit tests for GitHub OAuth, Security, Dependencies, and Auth API routes."""
+"""Unit tests for GitHub OAuth, Security, and Auth API routes."""
 
 import hashlib
 import uuid
@@ -10,7 +10,7 @@ import jwt
 from fastapi import HTTPException, status
 from starlette.testclient import TestClient
 
-from app.config import settings
+from app.config import Settings, settings
 from app.core.github import (
     check_github_org_membership,
     exchange_code_for_token,
@@ -23,12 +23,8 @@ from app.core.security import (
     hash_token,
     verify_master_key,
 )
-from app.dependencies import (
-    AuthContext,
-    get_current_auth,
-    get_current_user,
-    require_permission,
-)
+from app.db.session import get_db
+from app.dependencies import get_current_user
 from app.main import app
 from app.models.auth import RefreshToken
 from app.models.user import User
@@ -135,7 +131,9 @@ class TestGitHub(IsolatedAsyncioTestCase):
             self.assertTrue(is_member)
 
             # Not a member
-            is_member = await check_github_org_membership("gho_token", "Non-Existent-Org")
+            is_member = await check_github_org_membership(
+                "gho_token", "Non-Existent-Org"
+            )
             self.assertFalse(is_member)
 
             # None whitelist allows all
@@ -156,7 +154,9 @@ class TestGitHub(IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as cm:
                 await exchange_code_for_token("auth_code_xyz")
             self.assertEqual(cm.exception.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(cm.exception.detail, "Failed to exchange GitHub authorization code")
+            self.assertEqual(
+                cm.exception.detail, "Failed to exchange GitHub authorization code"
+            )
 
     async def test_exchange_code_for_token_missing_token_in_json(self):
         mock_resp = MagicMock()
@@ -168,7 +168,10 @@ class TestGitHub(IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as cm:
                 await exchange_code_for_token("auth_code_xyz")
             self.assertEqual(cm.exception.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(cm.exception.detail, "GitHub OAuth response did not contain access_token")
+            self.assertEqual(
+                cm.exception.detail,
+                "GitHub OAuth response did not contain access_token",
+            )
 
     async def test_get_github_user_profile_http_failure(self):
         mock_resp = MagicMock()
@@ -180,7 +183,9 @@ class TestGitHub(IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as cm:
                 await get_github_user_profile("invalid_token")
             self.assertEqual(cm.exception.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(cm.exception.detail, "Failed to retrieve GitHub user profile")
+            self.assertEqual(
+                cm.exception.detail, "Failed to retrieve GitHub user profile"
+            )
 
     async def test_check_github_org_membership_http_failure(self):
         mock_resp = MagicMock()
@@ -203,131 +208,30 @@ class TestGitHub(IsolatedAsyncioTestCase):
             self.assertFalse(is_member)
 
 
-class TestDependencies(IsolatedAsyncioTestCase):
-    def test_auth_context_permissions(self):
-        master_ctx = AuthContext(is_master=True)
-        self.assertTrue(master_ctx.has_permission("admin"))
-        self.assertTrue(master_ctx.has_permission("user"))
-        self.assertTrue(master_ctx.has_permission("custom:perm"))
-
-        admin_user = User(
-            id=uuid.uuid4(),
-            username="admin_user",
-            permissions=["admin"],
-        )
-        admin_ctx = AuthContext(user=admin_user)
-        self.assertTrue(admin_ctx.has_permission("admin"))
-        self.assertTrue(admin_ctx.has_permission("user"))
-
-        common_user = User(
-            id=uuid.uuid4(),
-            username="common_user",
-            permissions=["user"],
-        )
-        common_ctx = AuthContext(user=common_user)
-        self.assertTrue(common_ctx.has_permission("user"))
-        self.assertFalse(common_ctx.has_permission("admin"))
-
-    async def test_get_current_auth_master_key_header(self):
-        master_key = "hlp_live_test_key"
-        master_hash = hashlib.sha256(master_key.encode("utf-8")).hexdigest()
-
-        request = MagicMock()
-        request.headers = {"X-API-Key": master_key}
-        request.client = MagicMock(host="127.0.0.1")
-        request.method = "GET"
-        request.url.path = "/test"
-
-        db = AsyncMock()
-
-        with patch.object(settings, "master_api_key_hash", master_hash):
-            auth = await get_current_auth(request, db)
-            self.assertTrue(auth.is_master)
-
-    async def test_get_current_auth_master_key_bearer(self):
-        master_key = "hlp_live_test_key"
-        master_hash = hashlib.sha256(master_key.encode("utf-8")).hexdigest()
-
-        request = MagicMock()
-        request.headers = {"Authorization": f"Bearer {master_key}"}
-        request.client = MagicMock(host="127.0.0.1")
-        request.method = "POST"
-        request.url.path = "/test"
-
-        db = AsyncMock()
-
-        with patch.object(settings, "master_api_key_hash", master_hash):
-            auth = await get_current_auth(request, db)
-            self.assertTrue(auth.is_master)
-
-    async def test_get_current_auth_jwt(self):
-        user_id = uuid.uuid4()
-        user = User(id=user_id, username="testuser", permissions=["engineer"])
-        token = create_access_token({"sub": str(user_id), "permissions": ["engineer"]})
-
-        request = MagicMock()
-        request.headers = {"Authorization": f"Bearer {token}"}
-        request.client = MagicMock(host="127.0.0.1")
-        request.method = "GET"
-        request.url.path = "/api/v1/auth/me"
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = user
-
-        db = AsyncMock()
-        db.execute.return_value = mock_result
-
-        with patch.object(settings, "master_api_key_hash", "some_hash"):
-            auth = await get_current_auth(request, db)
-            self.assertFalse(auth.is_master)
-            self.assertIsNotNone(auth.user)
-            assert auth.user is not None
-            self.assertEqual(auth.user.id, user_id)
-
-    async def test_get_current_auth_missing_credentials(self):
-        request = MagicMock()
-        request.headers = {}
-        db = AsyncMock()
-
-        with self.assertRaises(HTTPException) as cm:
-            await get_current_auth(request, db)
-        self.assertEqual(cm.exception.status_code, status.HTTP_401_UNAUTHORIZED)
-
-    def test_get_current_user(self):
-        user = User(id=uuid.uuid4(), username="user1", permissions=["viewer"])
-        self.assertEqual(get_current_user(AuthContext(user=user)), user)
-
-        master_user = get_current_user(AuthContext(is_master=True))
-        self.assertEqual(master_user.username, "master_api_key")
-        self.assertIn("admin", master_user.permissions)
-
-    async def test_require_permission(self):
-        common_user = User(id=uuid.uuid4(), username="alice", role="user")
-        auth_common = AuthContext(user=common_user)
-
-        perm_check = require_permission("user")
-        result = await perm_check(auth_common)
-        self.assertEqual(result, auth_common)
-
-        admin_check = require_permission("admin")
-        with self.assertRaises(HTTPException) as cm:
-            await admin_check(auth_common)
-        self.assertEqual(cm.exception.status_code, status.HTTP_403_FORBIDDEN)
-
-
 class TestAuthAPI(IsolatedAsyncioTestCase):
     def setUp(self):
         self.client = TestClient(app)
+        self.mock_db = AsyncMock()
+        self.mock_db.add = MagicMock()
+        app.dependency_overrides[get_db] = lambda: self.mock_db
 
     def tearDown(self):
         app.dependency_overrides.clear()
+
+    def _set_db_scalar(self, value):
+        mock_res = MagicMock()
+        mock_res.scalar_one_or_none.return_value = value
+        self.mock_db.execute.return_value = mock_res
+        return mock_res
 
     def test_login_endpoint(self):
         response = self.client.get("/api/v1/auth/login")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("authorizationUrl", data)
-        self.assertIn("https://github.com/login/oauth/authorize", data["authorizationUrl"])
+        self.assertIn(
+            "https://github.com/login/oauth/authorize", data["authorizationUrl"]
+        )
 
         # Also test alias /github/login
         alias_response = self.client.get("/api/v1/auth/github/login")
@@ -342,27 +246,22 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             github_id=583231,
             permissions=["engineer"],
         )
-
-        mock_db = AsyncMock()
-        mock_db.add = MagicMock()
-        mock_scalar = MagicMock()
-        mock_scalar.scalar_one_or_none.return_value = test_user
-        mock_db.execute.return_value = mock_scalar
+        self._set_db_scalar(test_user)
 
         with (
-            patch("app.api.v1.auth.get_db", return_value=mock_db),
-            patch("app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange,
-            patch("app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock) as mock_profile,
-            patch("app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock) as mock_org,
+            patch(
+                "app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock
+            ) as mock_exchange,
+            patch(
+                "app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock
+            ) as mock_profile,
+            patch(
+                "app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock
+            ) as mock_org,
         ):
             mock_exchange.return_value = "gho_test_token"
             mock_profile.return_value = {"id": 583231, "login": "octocat"}
             mock_org.return_value = True
-
-            app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=test_user)
-            # Use TestClient with callback
-            from app.db.session import get_db as real_get_db
-            app.dependency_overrides[real_get_db] = lambda: mock_db
 
             response = self.client.get(
                 "/api/v1/auth/callback?code=mock_code&state=mock_state",
@@ -376,11 +275,11 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             # Verify cookie set
             self.assertIn("refresh_token", response.cookies)
 
-            app.dependency_overrides.clear()
-
     def test_callback_endpoint_csrf_failure(self):
         # 1. Calling callback without oauth_state cookie returns 400 Bad Request
-        res_no_cookie = self.client.get("/api/v1/auth/callback?code=mock_code&state=mock_state")
+        res_no_cookie = self.client.get(
+            "/api/v1/auth/callback?code=mock_code&state=mock_state"
+        )
         self.assertEqual(res_no_cookie.status_code, 400)
         self.assertIn("CSRF validation failed", res_no_cookie.json()["detail"])
 
@@ -417,15 +316,12 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         self.assertEqual(data["username"], "octocat")
         self.assertEqual(data["githubUsername"], "octocat")
         self.assertNotIn("permissions", data)
-        app.dependency_overrides.clear()
 
     def test_me_endpoint_unauthenticated(self):
         response = self.client.get("/api/v1/auth/me")
         self.assertEqual(response.status_code, 401)
 
     async def test_refresh_token_grace_period_reuse(self):
-        from app.db.session import get_db as real_get_db
-
         user_id = uuid.uuid4()
         family_id = uuid.uuid4()
         recently_revoked_token = RefreshToken(
@@ -437,26 +333,20 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             revoked_at=datetime.now(UTC) - timedelta(seconds=2),
             expires_at=datetime.now(UTC) + timedelta(days=1),
         )
+        self._set_db_scalar(recently_revoked_token)
 
-        mock_db = AsyncMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = recently_revoked_token
-        mock_db.execute.return_value = mock_res
-
-        app.dependency_overrides[real_get_db] = lambda: mock_db
         response = self.client.post(
             "/api/v1/auth/refresh",
             json={"refreshToken": "recently_revoked_token"},
         )
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["detail"], "Refresh token was recently rotated")
+        self.assertEqual(
+            response.json()["detail"], "Refresh token was recently rotated"
+        )
         # Ensure family was NOT revoked (commit not called)
-        self.assertEqual(mock_db.commit.call_count, 0)
-        app.dependency_overrides.clear()
+        self.assertEqual(self.mock_db.commit.call_count, 0)
 
     async def test_refresh_token_reuse_detection(self):
-        from app.db.session import get_db as real_get_db
-
         user_id = uuid.uuid4()
         family_id = uuid.uuid4()
         revoked_token = RefreshToken(
@@ -468,13 +358,8 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             revoked_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=15),
             expires_at=datetime.now(UTC) + timedelta(days=1),
         )
+        self._set_db_scalar(revoked_token)
 
-        mock_db = AsyncMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = revoked_token
-        mock_db.execute.return_value = mock_res
-
-        app.dependency_overrides[real_get_db] = lambda: mock_db
         response = self.client.post(
             "/api/v1/auth/refresh",
             json={"refreshToken": "already_revoked_token"},
@@ -482,8 +367,7 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"], "Refresh token has been revoked")
         # Ensure family was revoked (commit called)
-        self.assertEqual(mock_db.commit.call_count, 1)
-        app.dependency_overrides.clear()
+        self.assertEqual(self.mock_db.commit.call_count, 1)
 
     async def test_refresh_token_missing_credentials(self):
         # Calling /refresh with no cookie, body, or header returns 401
@@ -492,25 +376,16 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"], "Refresh token required")
 
     async def test_refresh_token_not_found_in_database(self):
-        from app.db.session import get_db as real_get_db
+        self._set_db_scalar(None)
 
-        mock_db = AsyncMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_res
-
-        app.dependency_overrides[real_get_db] = lambda: mock_db
         response = self.client.post(
             "/api/v1/auth/refresh",
             cookies={"refresh_token": "non_existent_token"},
         )
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"], "Invalid refresh token")
-        app.dependency_overrides.clear()
 
     async def test_refresh_token_expired(self):
-        from app.db.session import get_db as real_get_db
-
         user_id = uuid.uuid4()
         family_id = uuid.uuid4()
         # Test naive datetime normalization for expires_at (line 275)
@@ -523,13 +398,8 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             revoked_at=None,
             expires_at=datetime(2020, 1, 1, 10, 0, 0),
         )
+        self._set_db_scalar(expired_token)
 
-        mock_db = AsyncMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = expired_token
-        mock_db.execute.return_value = mock_res
-
-        app.dependency_overrides[real_get_db] = lambda: mock_db
         response = self.client.post(
             "/api/v1/auth/refresh",
             headers={"X-Refresh-Token": "expired_refresh_token"},
@@ -538,12 +408,9 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         self.assertEqual(response.json()["detail"], "Refresh token has expired")
         self.assertTrue(expired_token.is_revoked)
         self.assertIsNotNone(expired_token.revoked_at)
-        self.assertEqual(mock_db.commit.call_count, 1)
-        app.dependency_overrides.clear()
+        self.assertEqual(self.mock_db.commit.call_count, 1)
 
     async def test_refresh_token_associated_user_not_found(self):
-        from app.db.session import get_db as real_get_db
-
         user_id = uuid.uuid4()
         family_id = uuid.uuid4()
         valid_token = RefreshToken(
@@ -555,25 +422,17 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             revoked_at=None,
             expires_at=datetime.now(UTC) + timedelta(days=30),
         )
+        self._set_db_scalar(valid_token)
+        self.mock_db.get.return_value = None
 
-        mock_db = AsyncMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = valid_token
-        mock_db.execute.return_value = mock_res
-        mock_db.get.return_value = None
-
-        app.dependency_overrides[real_get_db] = lambda: mock_db
         response = self.client.post(
             "/api/v1/auth/refresh",
             json={"refreshToken": "valid_token_no_user"},
         )
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"], "Associated user not found")
-        app.dependency_overrides.clear()
 
     async def test_refresh_token_success(self):
-        from app.db.session import get_db as real_get_db
-
         user_id = uuid.uuid4()
         family_id = uuid.uuid4()
         user = User(
@@ -591,15 +450,9 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             revoked_at=None,
             expires_at=datetime.now(UTC) + timedelta(days=30),
         )
+        self._set_db_scalar(valid_token)
+        self.mock_db.get.return_value = user
 
-        mock_db = AsyncMock()
-        mock_db.add = MagicMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = valid_token
-        mock_db.execute.return_value = mock_res
-        mock_db.get.return_value = user
-
-        app.dependency_overrides[real_get_db] = lambda: mock_db
         response = self.client.post(
             "/api/v1/auth/refresh",
             cookies={"refresh_token": "valid_active_token"},
@@ -611,20 +464,20 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         self.assertEqual(data["user"]["username"], "refresh_user")
         self.assertTrue(valid_token.is_revoked)
         self.assertIsNotNone(valid_token.revoked_at)
-        self.assertEqual(mock_db.commit.call_count, 1)
+        self.assertEqual(self.mock_db.commit.call_count, 1)
         self.assertIn("refresh_token", response.cookies)
-        app.dependency_overrides.clear()
 
     async def test_callback_endpoint_org_membership_failure(self):
-        from app.db.session import get_db as real_get_db
-
-        mock_db = AsyncMock()
-        app.dependency_overrides[real_get_db] = lambda: mock_db
-
         with (
-            patch("app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange,
-            patch("app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock) as mock_profile,
-            patch("app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock) as mock_org,
+            patch(
+                "app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock
+            ) as mock_exchange,
+            patch(
+                "app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock
+            ) as mock_profile,
+            patch(
+                "app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock
+            ) as mock_org,
             patch.object(settings, "github_org_name", "Required-Org"),
         ):
             mock_exchange.return_value = "gho_test_token"
@@ -636,19 +489,19 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
                 cookies={"oauth_state": "mock_state"},
             )
             self.assertEqual(response.status_code, 403)
-            self.assertIn("User is not a member of required organization", response.json()["detail"])
-
-        app.dependency_overrides.clear()
+            self.assertIn(
+                "User is not a member of required organization",
+                response.json()["detail"],
+            )
 
     async def test_callback_endpoint_missing_profile_fields(self):
-        from app.db.session import get_db as real_get_db
-
-        mock_db = AsyncMock()
-        app.dependency_overrides[real_get_db] = lambda: mock_db
-
         with (
-            patch("app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange,
-            patch("app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock) as mock_profile,
+            patch(
+                "app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock
+            ) as mock_exchange,
+            patch(
+                "app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock
+            ) as mock_profile,
         ):
             mock_exchange.return_value = "gho_test_token"
             mock_profile.return_value = {"id": None, "login": None}
@@ -658,20 +511,16 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
                 cookies={"oauth_state": "mock_state"},
             )
             self.assertEqual(response.status_code, 400)
-            self.assertEqual(response.json()["detail"], "Invalid GitHub profile payload")
-
-        app.dependency_overrides.clear()
+            self.assertEqual(
+                response.json()["detail"], "Invalid GitHub profile payload"
+            )
 
     async def test_callback_endpoint_username_collision_and_update(self):
-        from app.db.session import get_db as real_get_db
-
-        mock_db = AsyncMock()
-        mock_db.add = MagicMock()
-
         async def fake_refresh(obj):
             if getattr(obj, "id", None) is None:
                 obj.id = uuid.uuid4()
-        mock_db.refresh.side_effect = fake_refresh
+
+        self.mock_db.refresh.side_effect = fake_refresh
 
         # 1. Existing user with same username collision
         existing_collision = User(
@@ -690,18 +539,22 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
         mock_scalar2 = MagicMock()
         mock_scalar2.scalar_one_or_none.return_value = existing_collision
 
-        mock_db.execute.side_effect = [mock_scalar1, mock_scalar2]
+        self.mock_db.execute.side_effect = [mock_scalar1, mock_scalar2]
 
         with (
-            patch("app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange,
-            patch("app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock) as mock_profile,
-            patch("app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock) as mock_org,
+            patch(
+                "app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock
+            ) as mock_exchange,
+            patch(
+                "app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock
+            ) as mock_profile,
+            patch(
+                "app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock
+            ) as mock_org,
         ):
             mock_exchange.return_value = "gho_test_token"
             mock_profile.return_value = {"id": 583231, "login": "octocat"}
             mock_org.return_value = True
-
-            app.dependency_overrides[real_get_db] = lambda: mock_db
 
             response = self.client.get(
                 "/api/v1/auth/callback?code=mock_code&state=mock_state",
@@ -709,16 +562,10 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             )
             self.assertEqual(response.status_code, 200)
             # Verify user was added with collided username
-            added_user = mock_db.add.call_args_list[0][0][0]
+            added_user = self.mock_db.add.call_args_list[0][0][0]
             self.assertEqual(added_user.username, "octocat_583231")
 
-        app.dependency_overrides.clear()
-
     async def test_callback_endpoint_existing_user_github_username_sync(self):
-        from app.db.session import get_db as real_get_db
-
-        mock_db = AsyncMock()
-        mock_db.add = MagicMock()
         existing_user = User(
             id=uuid.uuid4(),
             username="octocat_app",
@@ -726,21 +573,22 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             github_id=583231,
             role="user",
         )
-
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = existing_user
-        mock_db.execute.return_value = mock_res
+        self._set_db_scalar(existing_user)
 
         with (
-            patch("app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock) as mock_exchange,
-            patch("app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock) as mock_profile,
-            patch("app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock) as mock_org,
+            patch(
+                "app.api.v1.auth.exchange_code_for_token", new_callable=AsyncMock
+            ) as mock_exchange,
+            patch(
+                "app.api.v1.auth.get_github_user_profile", new_callable=AsyncMock
+            ) as mock_profile,
+            patch(
+                "app.api.v1.auth.check_github_org_membership", new_callable=AsyncMock
+            ) as mock_org,
         ):
             mock_exchange.return_value = "gho_test_token"
             mock_profile.return_value = {"id": 583231, "login": "new_github_login"}
             mock_org.return_value = True
-
-            app.dependency_overrides[real_get_db] = lambda: mock_db
 
             response = self.client.get(
                 "/api/v1/auth/callback?code=mock_code&state=mock_state",
@@ -748,29 +596,19 @@ class TestAuthAPI(IsolatedAsyncioTestCase):
             )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(existing_user.github_username, "new_github_login")
-            self.assertGreaterEqual(mock_db.commit.call_count, 1)
-
-        app.dependency_overrides.clear()
+            self.assertGreaterEqual(self.mock_db.commit.call_count, 1)
 
     async def test_logout_endpoint(self):
-        from app.db.session import get_db as real_get_db
-
-        mock_db = AsyncMock()
-        app.dependency_overrides[real_get_db] = lambda: mock_db
-
         response = self.client.post(
             "/api/v1/auth/logout",
             cookies={"refresh_token": "valid_refresh_token"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"message": "Logged out successfully"})
-        app.dependency_overrides.clear()
 
 
 class TestProductionSettingsValidation(TestCase):
     def test_development_allows_defaults(self):
-        from app.config import Settings
-
         s = Settings(
             environment="development",
             jwt_secret="dev-secret-change-in-production-32b",
@@ -781,8 +619,6 @@ class TestProductionSettingsValidation(TestCase):
         self.assertEqual(s.environment, "development")
 
     def test_production_rejects_insecure_or_short_jwt_secret(self):
-        from app.config import Settings
-
         # Default insecure secret
         with self.assertRaises(ValueError) as cm:
             Settings(
@@ -801,11 +637,12 @@ class TestProductionSettingsValidation(TestCase):
                 master_api_key="a_valid_secure_master_api_key_for_testing",
                 github_org_name="Hyperloop-UPV",
             )
-        self.assertIn("JWT_SECRET must be set to a secure secret of at least 32 characters", str(cm.exception))
+        self.assertIn(
+            "JWT_SECRET must be set to a secure secret of at least 32 characters",
+            str(cm.exception),
+        )
 
     def test_production_rejects_missing_or_insecure_master_key(self):
-        from app.config import Settings
-
         # Missing both master_api_key and master_api_key_hash
         with self.assertRaises(ValueError) as cm:
             Settings(
@@ -815,7 +652,10 @@ class TestProductionSettingsValidation(TestCase):
                 master_api_key_hash=None,
                 github_org_name="Hyperloop-UPV",
             )
-        self.assertIn("MASTER_API_KEY or MASTER_API_KEY_HASH must be configured", str(cm.exception))
+        self.assertIn(
+            "MASTER_API_KEY or MASTER_API_KEY_HASH must be configured",
+            str(cm.exception),
+        )
 
         # Default insecure master key
         with self.assertRaises(ValueError) as cm:
@@ -825,11 +665,12 @@ class TestProductionSettingsValidation(TestCase):
                 master_api_key="hlp_live_supersecret_admin_token_change_in_production",
                 github_org_name="Hyperloop-UPV",
             )
-        self.assertIn("MASTER_API_KEY or MASTER_API_KEY_HASH must be configured", str(cm.exception))
+        self.assertIn(
+            "MASTER_API_KEY or MASTER_API_KEY_HASH must be configured",
+            str(cm.exception),
+        )
 
     def test_production_github_org_guard(self):
-        from app.config import Settings
-
         # Without org and without allow_public_github_login
         with self.assertRaises(ValueError) as cm:
             Settings(

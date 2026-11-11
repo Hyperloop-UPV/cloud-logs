@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY,
   formatBytes,
@@ -13,51 +13,37 @@ import {
 } from "./format";
 
 describe("formatBytes", () => {
-  it("formats 0 bytes", () => {
-    expect(formatBytes(0)).toBe("0 B");
+  it.each([
+    [0, "0 B"],
+    [1, "1 B"],
+    [500, "500 B"],
+    [1023, "1023 B"],
+    [1024, "1 KB"],
+    [1536, "2 KB"],
+    [1024 * 100, "100 KB"],
+    [1024 * 1024, "1.0 MB"],
+    [1024 * 1024 * 1.5, "1.5 MB"],
+    [1024 * 1024 * 25.26, "25.3 MB"],
+    [1024 ** 3, "1.0 GB"],
+    [1024 ** 3 * 3.75, "3.8 GB"],
+    [1024 ** 4, "1.0 TB"],
+    [1024 ** 4 * 10, "10.0 TB"],
+  ])("formats %s bytes to %s", (bytes, expected) => {
+    expect(formatBytes(bytes)).toBe(expected);
   });
 
-  it("formats byte values under 1 KB without decimals", () => {
-    expect(formatBytes(1)).toBe("1 B");
-    expect(formatBytes(500)).toBe("500 B");
-    expect(formatBytes(1023)).toBe("1023 B");
-  });
-
-  it("formats KB values without decimals", () => {
-    expect(formatBytes(1024)).toBe("1 KB");
-    expect(formatBytes(1536)).toBe("2 KB");
-    expect(formatBytes(1024 * 100)).toBe("100 KB");
-  });
-
-  it("formats MB values with 1 decimal", () => {
-    expect(formatBytes(1024 * 1024)).toBe("1.0 MB");
-    expect(formatBytes(1024 * 1024 * 1.5)).toBe("1.5 MB");
-    expect(formatBytes(1024 * 1024 * 25.26)).toBe("25.3 MB");
-  });
-
-  it("formats GB values with 1 decimal", () => {
-    expect(formatBytes(1024 ** 3)).toBe("1.0 GB");
-    expect(formatBytes(1024 ** 3 * 3.75)).toBe("3.8 GB");
-  });
-
-  it("formats TB values with 1 decimal", () => {
-    expect(formatBytes(1024 ** 4)).toBe("1.0 TB");
-    expect(formatBytes(1024 ** 4 * 10)).toBe("10.0 TB");
-  });
-
-  it("returns EMPTY for null, undefined, NaN, or negative bytes", () => {
-    expect(formatBytes(null)).toBe(EMPTY);
-    expect(formatBytes(undefined)).toBe(EMPTY);
-    expect(formatBytes(Number.NaN)).toBe(EMPTY);
-    expect(formatBytes(-1)).toBe(EMPTY);
-    expect(formatBytes(-1024)).toBe(EMPTY);
-  });
+  it.each([null, undefined, Number.NaN, -1, -1024])(
+    "returns EMPTY for invalid byte value: %s",
+    (value) => {
+      expect(formatBytes(value)).toBe(EMPTY);
+    },
+  );
 });
 
 describe("formatDuration", () => {
   it("returns <1m for durations under one minute", () => {
     const start = "2026-03-12T10:00:00Z";
-    const end = "2026-03-12T10:00:20Z"; // 20s < 30s rounds to 0 minutes
+    const end = "2026-03-12T10:00:20Z";
     expect(formatDuration(start, end)).toBe("<1m");
   });
 
@@ -73,114 +59,114 @@ describe("formatDuration", () => {
     expect(formatDuration(start, end)).toBe("2h 35m");
   });
 
-  it("formats durations exceeding 24 hours (days)", () => {
+  it("formats durations exceeding 24 hours", () => {
     const start = "2026-03-12T10:00:00Z";
-    const end = "2026-03-13T12:00:00Z"; // 26 hours
+    const end = "2026-03-13T12:00:00Z";
     expect(formatDuration(start, end)).toBe("26h 0m");
   });
 
-  it("returns EMPTY when start or end is missing or null", () => {
-    expect(formatDuration(null, "2026-03-12T10:00:00Z")).toBe(EMPTY);
-    expect(formatDuration("2026-03-12T10:00:00Z", null)).toBe(EMPTY);
-    expect(formatDuration(undefined, undefined)).toBe(EMPTY);
-    expect(formatDuration("", "")).toBe(EMPTY);
-  });
-
-  it("returns EMPTY for negative durations (end before start)", () => {
-    const start = "2026-03-12T12:00:00Z";
-    const end = "2026-03-12T10:00:00Z";
+  it.each([
+    [null, "2026-03-12T10:00:00Z"],
+    ["2026-03-12T10:00:00Z", null],
+    [undefined, undefined],
+    ["", ""],
+  ])("returns EMPTY when start or end is missing: %s, %s", (start, end) => {
     expect(formatDuration(start, end)).toBe(EMPTY);
   });
 
-  it("returns EMPTY for invalid dates", () => {
-    expect(formatDuration("not-a-date", "2026-03-12T10:00:00Z")).toBe(EMPTY);
-    expect(formatDuration("2026-03-12T10:00:00Z", "invalid")).toBe(EMPTY);
+  it("returns EMPTY for negative durations (end before start)", () => {
+    expect(formatDuration("2026-03-12T12:00:00Z", "2026-03-12T10:00:00Z")).toBe(
+      EMPTY,
+    );
+  });
+
+  it.each([
+    ["not-a-date", "2026-03-12T10:00:00Z"],
+    ["2026-03-12T10:00:00Z", "invalid"],
+  ])("returns EMPTY for invalid date strings: %s, %s", (start, end) => {
+    expect(formatDuration(start, end)).toBe(EMPTY);
   });
 });
 
-describe("formatDate and formatRelativeTime", () => {
+describe("formatDate", () => {
   it("formats valid ISO dates with en-GB convention", () => {
-    const iso = "2026-03-12T10:00:00Z";
-    expect(formatDate(iso)).toBe("12 Mar 2026");
+    expect(formatDate("2026-03-12T10:00:00Z")).toBe("12 Mar 2026");
   });
 
   it("handles ISO strings with timezone offsets", () => {
-    const iso = "2026-03-12T02:00:00+02:00";
-    expect(formatDate(iso)).toBe("12 Mar 2026");
+    expect(formatDate("2026-03-12T02:00:00+02:00")).toBe("12 Mar 2026");
   });
 
-  it("returns EMPTY for invalid, null, or undefined dates", () => {
-    expect(formatDate(null)).toBe(EMPTY);
-    expect(formatDate(undefined)).toBe(EMPTY);
-    expect(formatDate("")).toBe(EMPTY);
-    expect(formatDate("gibberish")).toBe(EMPTY);
+  it.each([null, undefined, "", "gibberish"])(
+    "returns EMPTY for invalid, null, or undefined date: %s",
+    (value) => {
+      expect(formatDate(value)).toBe(EMPTY);
+    },
+  );
+});
+
+describe("formatRelativeTime", () => {
+  const baseTime = new Date("2026-03-12T12:00:00Z");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(baseTime);
   });
 
-  it("formats relative time correctly for various horizons", () => {
-    const now = Date.now();
-    // 0 seconds ago -> "now"
-    expect(formatRelativeTime(new Date(now).toISOString())).toBe("now");
-    // 30 seconds ago -> "30 seconds ago"
-    expect(formatRelativeTime(new Date(now - 30 * 1000).toISOString())).toBe(
-      "30 seconds ago",
-    );
-    // 5 minutes ago
-    expect(
-      formatRelativeTime(new Date(now - 5 * 60 * 1000).toISOString()),
-    ).toBe("5 minutes ago");
-    // 2 hours ago
-    expect(
-      formatRelativeTime(new Date(now - 2 * 3600 * 1000).toISOString()),
-    ).toBe("2 hours ago");
-    // 1 day ago -> "yesterday"
-    expect(
-      formatRelativeTime(new Date(now - 24 * 3600 * 1000).toISOString()),
-    ).toBe("yesterday");
-    // 3 days ago
-    expect(
-      formatRelativeTime(new Date(now - 3 * 24 * 3600 * 1000).toISOString()),
-    ).toBe("3 days ago");
-    // years ago
-    expect(
-      formatRelativeTime(
-        new Date(now - 365 * 24 * 3600 * 1000 * 2).toISOString(),
-      ),
-    ).toBe("2 years ago");
-    // formatRelative and formatRelativeTime are aliases
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ["2026-03-12T12:00:00Z", "now"],
+    ["2026-03-12T11:59:30Z", "30 seconds ago"],
+    ["2026-03-12T11:55:00Z", "5 minutes ago"],
+    ["2026-03-12T10:00:00Z", "2 hours ago"],
+    ["2026-03-11T12:00:00Z", "yesterday"],
+    ["2026-03-09T12:00:00Z", "3 days ago"],
+    ["2024-03-12T12:00:00Z", "2 years ago"],
+  ])("formats %s as %s", (iso, expected) => {
+    expect(formatRelativeTime(iso)).toBe(expected);
+  });
+
+  it("is aliased to formatRelative", () => {
     expect(formatRelativeTime).toBe(formatRelative);
   });
 
-  it("returns EMPTY for invalid, null, or undefined inputs in formatRelativeTime", () => {
-    expect(formatRelativeTime(null)).toBe(EMPTY);
-    expect(formatRelativeTime(undefined)).toBe(EMPTY);
-    expect(formatRelativeTime("")).toBe(EMPTY);
-    expect(formatRelativeTime("not-a-date")).toBe(EMPTY);
-  });
+  it.each([null, undefined, "", "not-a-date"])(
+    "returns EMPTY for invalid relative time input: %s",
+    (input) => {
+      expect(formatRelativeTime(input)).toBe(EMPTY);
+    },
+  );
 });
 
 describe("formatMonthKey", () => {
-  it("formats YYYY_MM keys to Month Year", () => {
-    expect(formatMonthKey("2026_10")).toBe("Oct 2026");
-    expect(formatMonthKey("2026_01")).toBe("Jan 2026");
-    expect(formatMonthKey("2025_12")).toBe("Dec 2025");
+  it.each([
+    ["2026_10", "Oct 2026"],
+    ["2026_01", "Jan 2026"],
+    ["2025_12", "Dec 2025"],
+  ])("formats valid month key %s to %s", (key, expected) => {
+    expect(formatMonthKey(key)).toBe(expected);
   });
 
-  it("returns input string as-is for malformed or unrecognized keys", () => {
-    expect(formatMonthKey("2026-10")).toBe("2026-10");
-    expect(formatMonthKey("October 2026")).toBe("October 2026");
-    expect(formatMonthKey("invalid")).toBe("invalid");
-    expect(formatMonthKey("")).toBe("");
-  });
+  it.each(["2026-10", "October 2026", "invalid", ""])(
+    "returns input string as-is for malformed or unrecognized key: %s",
+    (key) => {
+      expect(formatMonthKey(key)).toBe(key);
+    },
+  );
 });
 
-describe("formatDateTime, formatRange, formatCount", () => {
+describe("formatDateTime", () => {
   it("formats date and time", () => {
     const iso = "2026-03-12T14:30:00Z";
-    // Check it includes day, month, year
     expect(formatDateTime(iso)).toMatch(/12 Mar 2026/);
     expect(formatDateTime(null)).toBe(EMPTY);
   });
+});
 
+describe("formatRange", () => {
   it("formats ranges on same day vs different days", () => {
     const start = "2026-03-12T10:00:00Z";
     const sameDayEnd = "2026-03-12T12:00:00Z";
@@ -194,11 +180,17 @@ describe("formatDateTime, formatRange, formatCount", () => {
     expect(formatRange(start, null)).toBe(`${formatDateTime(start)} → …`);
     expect(formatRange(null, null)).toBe(EMPTY);
   });
+});
 
-  it("formats counts with thousand separators", () => {
-    expect(formatCount(1234)).toBe("1,234");
-    expect(formatCount(0)).toBe("0");
-    expect(formatCount(null)).toBe(EMPTY);
-    expect(formatCount(undefined)).toBe(EMPTY);
+describe("formatCount", () => {
+  it.each([
+    [1234, "1,234"],
+    [0, "0"],
+  ])("formats count %s as %s", (count, expected) => {
+    expect(formatCount(count)).toBe(expected);
+  });
+
+  it.each([null, undefined])("returns EMPTY for %s", (value) => {
+    expect(formatCount(value)).toBe(EMPTY);
   });
 });

@@ -24,6 +24,22 @@ from app.dependencies import (
 from app.models.user import User
 
 
+def make_mock_request(
+    headers: dict | None = None,
+    query_params: dict | None = None,
+    client_ip: str | None = "127.0.0.1",
+    method: str = "GET",
+    path: str = "/api/v1/logs",
+) -> MagicMock:
+    request = MagicMock()
+    request.headers = headers if headers is not None else {}
+    request.query_params = query_params if query_params is not None else {}
+    request.client = MagicMock(host=client_ip) if client_ip else None
+    request.method = method
+    request.url.path = path
+    return request
+
+
 class TestAuthContext(TestCase):
     def test_auth_context_defaults_with_no_user(self):
         ctx = AuthContext(user=None, is_master=False)
@@ -69,13 +85,10 @@ class TestAuthContext(TestCase):
 class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
     async def test_x_api_key_valid_master(self):
         master_key = "test_valid_master_api_key"
-        request = MagicMock()
-        request.headers = {"X-API-Key": master_key}
-        request.query_params = {}
-        request.client = MagicMock(host="10.0.0.1")
-        request.method = "GET"
-        request.url.path = "/api/v1/logs"
-
+        request = make_mock_request(
+            headers={"X-API-Key": master_key},
+            client_ip="10.0.0.1",
+        )
         db = AsyncMock()
 
         with patch("app.dependencies.verify_master_key", return_value=True):
@@ -84,13 +97,11 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertIsNone(auth.user)
 
     async def test_x_api_key_valid_master_without_client(self):
-        request = MagicMock()
-        request.headers = {"X-API-Key": "key"}
-        request.query_params = {}
-        request.client = None
-        request.method = "POST"
-        request.url.path = "/api/v1/logs"
-
+        request = make_mock_request(
+            headers={"X-API-Key": "key"},
+            client_ip=None,
+            method="POST",
+        )
         db = AsyncMock()
 
         with patch("app.dependencies.verify_master_key", return_value=True):
@@ -98,9 +109,7 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertTrue(auth.is_master)
 
     async def test_x_api_key_invalid(self):
-        request = MagicMock()
-        request.headers = {"X-API-Key": "invalid_master_key"}
-        request.query_params = {}
+        request = make_mock_request(headers={"X-API-Key": "invalid_master_key"})
         db = AsyncMock()
 
         with patch("app.dependencies.verify_master_key", return_value=False):
@@ -111,9 +120,7 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertEqual(cm.exception.headers.get("WWW-Authenticate"), "ApiKey")
 
     async def test_missing_credentials(self):
-        request = MagicMock()
-        request.headers = {}
-        request.query_params = {}
+        request = make_mock_request()
         db = AsyncMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -123,9 +130,7 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.headers.get("WWW-Authenticate"), "Bearer")
 
     async def test_invalid_authorization_scheme_basic(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Basic dXNlcjpwYXNz"}
-        request.query_params = {}
+        request = make_mock_request(headers={"Authorization": "Basic dXNlcjpwYXNz"})
         db = AsyncMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -134,9 +139,9 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
         self.assertIn("Invalid authorization scheme", cm.exception.detail)
 
     async def test_invalid_authorization_scheme_no_space(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "BearerTokenWithoutSpace"}
-        request.query_params = {}
+        request = make_mock_request(
+            headers={"Authorization": "BearerTokenWithoutSpace"}
+        )
         db = AsyncMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -145,9 +150,7 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
         self.assertIn("Invalid authorization scheme", cm.exception.detail)
 
     async def test_bearer_empty_token(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer   "}
-        request.query_params = {}
+        request = make_mock_request(headers={"Authorization": "Bearer   "})
         db = AsyncMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -156,9 +159,7 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.detail, "Missing authentication credentials")
 
     async def test_query_param_token_empty(self):
-        request = MagicMock()
-        request.headers = {}
-        request.query_params = {"token": "   "}
+        request = make_mock_request(query_params={"token": "   "})
         db = AsyncMock()
 
         with self.assertRaises(HTTPException) as cm:
@@ -167,12 +168,10 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.detail, "Missing authentication credentials")
 
     async def test_bearer_master_key(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer master_secret_val"}
-        request.query_params = {}
-        request.client = MagicMock(host="192.168.1.100")
-        request.method = "GET"
-        request.url.path = "/api/v1/logs"
+        request = make_mock_request(
+            headers={"Authorization": "Bearer master_secret_val"},
+            client_ip="192.168.1.100",
+        )
         db = AsyncMock()
 
         with patch("app.dependencies.verify_master_key", return_value=True):
@@ -184,9 +183,7 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
         user = User(id=user_id, username="query_user", role="user")
         token = create_access_token({"sub": str(user_id)})
 
-        request = MagicMock()
-        request.headers = {}
-        request.query_params = {"token": token}
+        request = make_mock_request(query_params={"token": token})
         db = AsyncMock()
         res = MagicMock()
         res.scalar_one_or_none.return_value = user
@@ -198,9 +195,9 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertEqual(auth.user, user)
 
     async def test_jwt_expired_signature_error(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer some_expired_token"}
-        request.query_params = {}
+        request = make_mock_request(
+            headers={"Authorization": "Bearer some_expired_token"}
+        )
         db = AsyncMock()
 
         with (
@@ -216,9 +213,9 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertEqual(cm.exception.detail, "Access token has expired")
 
     async def test_jwt_decode_error(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer some_corrupt_token"}
-        request.query_params = {}
+        request = make_mock_request(
+            headers={"Authorization": "Bearer some_corrupt_token"}
+        )
         db = AsyncMock()
 
         with (
@@ -234,14 +231,16 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertEqual(cm.exception.detail, "Invalid access token")
 
     async def test_jwt_missing_sub(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer some_valid_token"}
-        request.query_params = {}
+        request = make_mock_request(
+            headers={"Authorization": "Bearer some_valid_token"}
+        )
         db = AsyncMock()
 
         with (
             patch("app.dependencies.verify_master_key", return_value=False),
-            patch("app.dependencies.decode_access_token", return_value={"role": "user"}),
+            patch(
+                "app.dependencies.decode_access_token", return_value={"role": "user"}
+            ),
         ):
             with self.assertRaises(HTTPException) as cm:
                 await get_current_auth(request, db)
@@ -249,9 +248,9 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
             self.assertEqual(cm.exception.detail, "Invalid access token payload")
 
     async def test_jwt_invalid_uuid_sub(self):
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer some_valid_token"}
-        request.query_params = {}
+        request = make_mock_request(
+            headers={"Authorization": "Bearer some_valid_token"}
+        )
         db = AsyncMock()
 
         with (
@@ -268,9 +267,9 @@ class TestGetCurrentAuthDependency(IsolatedAsyncioTestCase):
 
     async def test_jwt_user_not_found_in_database(self):
         user_uuid = uuid.uuid4()
-        request = MagicMock()
-        request.headers = {"Authorization": "Bearer some_valid_token"}
-        request.query_params = {}
+        request = make_mock_request(
+            headers={"Authorization": "Bearer some_valid_token"}
+        )
 
         mock_res = MagicMock()
         mock_res.scalar_one_or_none.return_value = None
@@ -347,14 +346,14 @@ class TestRequirePermissionAndRole(IsolatedAsyncioTestCase):
 
 class TestSecurityHelpers(TestCase):
     def test_log_master_key_usage_with_x_forwarded_for(self):
-        request = MagicMock()
-        request.headers = {
-            "x-forwarded-for": "198.51.100.42, 10.0.0.1",
-            "user-agent": "CustomAgent/1.0",
-        }
-        request.client = MagicMock(host="10.0.0.1")
-        request.method = "POST"
-        request.url.path = "/api/v1/logs"
+        request = make_mock_request(
+            headers={
+                "x-forwarded-for": "198.51.100.42, 10.0.0.1",
+                "user-agent": "CustomAgent/1.0",
+            },
+            client_ip="10.0.0.1",
+            method="POST",
+        )
 
         with patch("app.core.security.logger.warning") as mock_warn:
             log_master_key_usage(request)
@@ -364,11 +363,10 @@ class TestSecurityHelpers(TestCase):
             self.assertEqual(args[4], "CustomAgent/1.0")
 
     def test_log_master_key_usage_without_forwarded(self):
-        request = MagicMock()
-        request.headers = {}
-        request.client = MagicMock(host="172.16.0.5")
-        request.method = "GET"
-        request.url.path = "/api/v1/users"
+        request = make_mock_request(
+            client_ip="172.16.0.5",
+            path="/api/v1/users",
+        )
 
         with patch("app.core.security.logger.warning") as mock_warn:
             log_master_key_usage(request)
@@ -378,11 +376,11 @@ class TestSecurityHelpers(TestCase):
             self.assertEqual(args[4], "unknown")
 
     def test_log_master_key_usage_no_client(self):
-        request = MagicMock()
-        request.headers = {}
-        request.client = None
-        request.method = "DELETE"
-        request.url.path = "/api/v1/logs/1"
+        request = make_mock_request(
+            client_ip=None,
+            method="DELETE",
+            path="/api/v1/logs/1",
+        )
 
         with patch("app.core.security.logger.warning") as mock_warn:
             log_master_key_usage(request)
@@ -392,7 +390,9 @@ class TestSecurityHelpers(TestCase):
 
     def test_create_access_token_with_user_id_and_username(self):
         uid = uuid.uuid4()
-        token = create_access_token(user_id_or_data=uid, username="test_name", role="admin")
+        token = create_access_token(
+            user_id_or_data=uid, username="test_name", role="admin"
+        )
         decoded = decode_access_token(token)
         self.assertEqual(decoded["sub"], str(uid))
         self.assertEqual(decoded["username"], "test_name")
@@ -423,4 +423,3 @@ class TestSecurityHelpers(TestCase):
         with patch.object(settings, "master_api_key", "plain_secret_key"):
             self.assertTrue(verify_master_key("plain_secret_key"))
             self.assertFalse(verify_master_key("wrong_key"))
-

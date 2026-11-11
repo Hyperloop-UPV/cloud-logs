@@ -123,8 +123,16 @@ class Log(Base):
     def duration(self) -> float | None:
         """Recording duration in seconds computed from start_date and end_date."""
         if self.start_date and self.end_date:
-            start = self.start_date if self.start_date.tzinfo is not None else self.start_date.replace(tzinfo=UTC)
-            end = self.end_date if self.end_date.tzinfo is not None else self.end_date.replace(tzinfo=UTC)
+            start = (
+                self.start_date
+                if self.start_date.tzinfo is not None
+                else self.start_date.replace(tzinfo=UTC)
+            )
+            end = (
+                self.end_date
+                if self.end_date.tzinfo is not None
+                else self.end_date.replace(tzinfo=UTC)
+            )
             diff = (end - start).total_seconds()
             return max(0.0, round(diff, 3))
         return None

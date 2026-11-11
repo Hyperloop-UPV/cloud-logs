@@ -142,7 +142,11 @@ async def update_user_role(
     await db.commit()
     await db.refresh(user)
 
-    actor_desc = "Master Key" if auth.is_master else f"Admin {auth.user.username if auth.user else 'unknown'}"
+    actor_desc = (
+        "Master Key"
+        if auth.is_master
+        else f"Admin {auth.user.username if auth.user else 'unknown'}"
+    )
     logger.info(
         "User role updated: user_id=%s, username=%s, old_role=%s, new_role=%s, changed_by=%s",
         user.id,

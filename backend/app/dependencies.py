@@ -189,7 +189,9 @@ def get_current_user(auth: AuthContext = Depends(get_current_auth)) -> User:
     )
 
 
-def require_permission(permission: str) -> Callable[..., Coroutine[Any, Any, AuthContext]]:
+def require_permission(
+    permission: str,
+) -> Callable[..., Coroutine[Any, Any, AuthContext]]:
     """Dependency factory checking that the authenticated caller holds the required permission."""
 
     async def _permission_dependency(

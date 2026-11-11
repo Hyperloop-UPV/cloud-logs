@@ -12,12 +12,25 @@ from app.schemas.base import CamelModel
 class LogInitiateRequest(CamelModel):
     """Initial request from client proposing a log upload to Google Drive."""
 
-    file_name: str = Field(..., min_length=1, max_length=255, description="File name (e.g. telemetry_run.zip)")
+    file_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="File name (e.g. telemetry_run.zip)",
+    )
     file_size: int = Field(..., ge=0, description="Size in bytes of the file to upload")
-    file_date: datetime | None = Field(default=None, description="Date of capture/creation of the log")
-    start_date: datetime | None = Field(default=None, description="Start timestamp of telemetry data")
-    end_date: datetime | None = Field(default=None, description="End timestamp of telemetry data")
-    file_hash: str | None = Field(default=None, description="Expected SHA-256 hash if pre-calculated")
+    file_date: datetime | None = Field(
+        default=None, description="Date of capture/creation of the log"
+    )
+    start_date: datetime | None = Field(
+        default=None, description="Start timestamp of telemetry data"
+    )
+    end_date: datetime | None = Field(
+        default=None, description="End timestamp of telemetry data"
+    )
+    file_hash: str | None = Field(
+        default=None, description="Expected SHA-256 hash if pre-calculated"
+    )
     tags: list[str] = Field(default_factory=list, description="Categorization tags")
     note: str | None = Field(default=None, description="Descriptive notes or comments")
     client_metadata: dict[str, Any] = Field(
@@ -30,16 +43,26 @@ class LogInitiateResponse(CamelModel):
     """Server response providing upload URL and UUID for client upload to Drive."""
 
     id: UUID = Field(..., description="Unique UUID assigned to this log")
-    upload_url: str = Field(..., description="Google Drive upload / resumable session URL")
-    drive_folder: str = Field(..., description="Target year_month folder in Drive (e.g. 2026_10)")
-    status: str = Field(default="pending_upload", description="Current status of the log")
-    expires_in_seconds: int | None = Field(default=None, description="TTL in seconds of upload URL if applicable")
+    upload_url: str = Field(
+        ..., description="Google Drive upload / resumable session URL"
+    )
+    drive_folder: str = Field(
+        ..., description="Target year_month folder in Drive (e.g. 2026_10)"
+    )
+    status: str = Field(
+        default="pending_upload", description="Current status of the log"
+    )
+    expires_in_seconds: int | None = Field(
+        default=None, description="TTL in seconds of upload URL if applicable"
+    )
 
 
 class LogCompleteRequest(CamelModel):
     """Client notification indicating upload to Google Drive has finished."""
 
-    file_hash: str | None = Field(default=None, description="Optional SHA-256 hash calculated during upload")
+    file_hash: str | None = Field(
+        default=None, description="Optional SHA-256 hash calculated during upload"
+    )
     drive_file_id: str | None = Field(
         default=None,
         alias="driveFileId",
@@ -52,7 +75,9 @@ class LogCompleteResponse(CamelModel):
 
     id: UUID
     status: str = Field(..., description="Final status (ready or failed)")
-    drive_url: str = Field(..., description="Google Drive web view/direct link to the uploaded file")
+    drive_url: str = Field(
+        ..., description="Google Drive web view/direct link to the uploaded file"
+    )
     drive_folder: str | None = None
     file_name: str
     file_size: int | None = None
@@ -62,7 +87,9 @@ class LogCompleteResponse(CamelModel):
 class LogAbortRequest(CamelModel):
     """Payload to cancel an ongoing or pending upload."""
 
-    reason: str | None = Field(default=None, max_length=500, description="Optional cancellation reason")
+    reason: str | None = Field(
+        default=None, max_length=500, description="Optional cancellation reason"
+    )
 
 
 class LogAbortResponse(CamelModel):
@@ -79,7 +106,9 @@ class LogUpdateRequest(CamelModel):
 
     tags: list[str] | None = Field(default=None, description="Updated list of tags")
     note: str | None = Field(default=None, description="Updated descriptive note")
-    client_metadata: dict[str, Any] | None = Field(default=None, description="Updated client metadata dictionary")
+    client_metadata: dict[str, Any] | None = Field(
+        default=None, description="Updated client metadata dictionary"
+    )
 
 
 class LogOut(CamelModel):
@@ -119,8 +148,16 @@ class LogOut(CamelModel):
     def duration(self) -> float | None:
         """Recording duration in seconds computed from start_date and end_date."""
         if self.start_date and self.end_date:
-            start = self.start_date if self.start_date.tzinfo is not None else self.start_date.replace(tzinfo=UTC)
-            end = self.end_date if self.end_date.tzinfo is not None else self.end_date.replace(tzinfo=UTC)
+            start = (
+                self.start_date
+                if self.start_date.tzinfo is not None
+                else self.start_date.replace(tzinfo=UTC)
+            )
+            end = (
+                self.end_date
+                if self.end_date.tzinfo is not None
+                else self.end_date.replace(tzinfo=UTC)
+            )
             diff = (end - start).total_seconds()
             return max(0.0, round(diff, 3))
         return None
@@ -159,12 +196,20 @@ class TagCoOccurrence(CamelModel):
 class TagDetailOut(CamelModel):
     tag: str
     logs: int = Field(..., description="Count of logs with this tag")
-    total_size: int = Field(..., description="Total size in bytes of logs with this tag")
-    average_size: float = Field(..., description="Average log size in bytes for this tag")
-    status_mix: dict[str, int] = Field(default_factory=dict, description="Counts by status for this tag")
+    total_size: int = Field(
+        ..., description="Total size in bytes of logs with this tag"
+    )
+    average_size: float = Field(
+        ..., description="Average log size in bytes for this tag"
+    )
+    status_mix: dict[str, int] = Field(
+        default_factory=dict, description="Counts by status for this tag"
+    )
     first_used: datetime | None = None
     last_used: datetime | None = None
-    used_with: list[TagCoOccurrence] = Field(default_factory=list, description="Top co-occurring tags with counts")
+    used_with: list[TagCoOccurrence] = Field(
+        default_factory=list, description="Top co-occurring tags with counts"
+    )
 
 
 class TagsStatsResponse(CamelModel):
@@ -178,23 +223,43 @@ class LogStatsResponse(CamelModel):
 
     total_logs: int = Field(..., description="Total active non-deleted logs")
     total_bytes: int = Field(..., description="Total size in bytes of ready logs")
-    by_status: dict[str, int] = Field(default_factory=dict, description="Count of logs grouped by status")
-    by_folder: dict[str, int] = Field(default_factory=dict, description="Count of logs grouped by monthly folder")
+    by_status: dict[str, int] = Field(
+        default_factory=dict, description="Count of logs grouped by status"
+    )
+    by_folder: dict[str, int] = Field(
+        default_factory=dict, description="Count of logs grouped by monthly folder"
+    )
     total_tags: int = Field(..., description="Count of distinct tags")
-    top_tags: list[TagCount] = Field(default_factory=list, description="Top most frequent tags")
-    needs_attention: int = Field(default=0, description="Count of logs pending upload, failed, or aborted")
-    uploads_per_month: list[MonthlyUploadStats] = Field(default_factory=list, description="Monthly upload statistics")
-    recent_uploads: list[LogOut] = Field(default_factory=list, description="Most recent log uploads")
-    tag_details: list[TagDetailOut] = Field(default_factory=list, description="Detailed tag breakdown")
+    top_tags: list[TagCount] = Field(
+        default_factory=list, description="Top most frequent tags"
+    )
+    needs_attention: int = Field(
+        default=0, description="Count of logs pending upload, failed, or aborted"
+    )
+    uploads_per_month: list[MonthlyUploadStats] = Field(
+        default_factory=list, description="Monthly upload statistics"
+    )
+    recent_uploads: list[LogOut] = Field(
+        default_factory=list, description="Most recent log uploads"
+    )
+    tag_details: list[TagDetailOut] = Field(
+        default_factory=list, description="Detailed tag breakdown"
+    )
 
 
 class LogCleanupResponse(CamelModel):
     """Result of catalog cleanup operation."""
 
     affected_logs: int = Field(..., description="Total logs processed or modified")
-    orphaned_cleaned: int = Field(..., description="Stale uncompleted logs soft-deleted")
-    soft_deleted_purged: int = Field(..., description="Stale soft-deleted logs permanently purged")
-    tokens_cleaned: int = Field(default=0, description="Expired and revoked refresh tokens permanently purged")
+    orphaned_cleaned: int = Field(
+        ..., description="Stale uncompleted logs soft-deleted"
+    )
+    soft_deleted_purged: int = Field(
+        ..., description="Stale soft-deleted logs permanently purged"
+    )
+    tokens_cleaned: int = Field(
+        default=0, description="Expired and revoked refresh tokens permanently purged"
+    )
     cutoff_date: datetime = Field(..., description="Calculated cutoff threshold date")
     dry_run: bool = Field(default=False, description="Whether operation was a dry run")
     message: str = Field(..., description="Status message of the cleanup operation")

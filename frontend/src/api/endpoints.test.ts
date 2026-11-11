@@ -22,13 +22,10 @@ import {
   updateUserRole,
   verifyMasterKey,
 } from "./endpoints";
+import { setupMockSessionStorage } from "./test-utils";
 
 describe("downloadUrl", () => {
   beforeEach(() => {
-    clearAccessToken();
-  });
-
-  afterEach(() => {
     clearAccessToken();
   });
 
@@ -55,24 +52,14 @@ describe("endpoint URL generators and query parameter serialization", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    const storage = new Map<string, string>();
-    const mockSessionStorage = {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, val: string) => storage.set(key, String(val)),
-      removeItem: (key: string) => storage.delete(key),
-      clear: () => storage.clear(),
-    };
-    vi.stubGlobal("window", { sessionStorage: mockSessionStorage });
+    setupMockSessionStorage();
     clearSession();
 
     fetchSpy = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input) => {
         const url = typeof input === "string" ? input : (input as Request).url;
-        return new Response(JSON.stringify({ ok: true, url }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
+        return Response.json({ ok: true, url });
       });
   });
 
@@ -90,14 +77,10 @@ describe("endpoint URL generators and query parameter serialization", () => {
       tags: ["bms", "vcu"],
     });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
-    expect(calledUrl).toContain("/api/v1/logs?");
-    expect(calledUrl).toContain("page=2");
-    expect(calledUrl).toContain("pageSize=50");
-    expect(calledUrl).toContain("textQuery=motor+test");
-    expect(calledUrl).toContain("status=ready");
-    expect(calledUrl).toContain("tags=bms%2Cvcu");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/v1/logs?page=2&pageSize=50&textQuery=motor+test&status=ready&tags=bms%2Cvcu",
+      expect.anything(),
+    );
   });
 
   it("searchLogs omits null, undefined, and empty string query parameters", async () => {
@@ -108,14 +91,15 @@ describe("endpoint URL generators and query parameter serialization", () => {
       driveFolder: undefined,
     });
 
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
-    expect(calledUrl).toBe("/api/v1/logs?page=1");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/v1/logs?page=1",
+      expect.anything(),
+    );
   });
 
   it("searchLogs defaults to /api/v1/logs when query is empty", async () => {
     await searchLogs();
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
-    expect(calledUrl).toBe("/api/v1/logs");
+    expect(fetchSpy).toHaveBeenCalledWith("/api/v1/logs", expect.anything());
   });
 
   it("getLog calls /api/v1/logs/:id", async () => {
@@ -126,21 +110,25 @@ describe("endpoint URL generators and query parameter serialization", () => {
     );
   });
 
-  it("listTags, getTagsStats, and getStats call correct endpoints", async () => {
+  it("listTags calls /api/v1/logs/tags", async () => {
     await listTags();
-    expect(fetchSpy).toHaveBeenLastCalledWith(
+    expect(fetchSpy).toHaveBeenCalledWith(
       "/api/v1/logs/tags",
       expect.anything(),
     );
+  });
 
+  it("getTagsStats calls /api/v1/logs/tags/stats", async () => {
     await getTagsStats();
-    expect(fetchSpy).toHaveBeenLastCalledWith(
+    expect(fetchSpy).toHaveBeenCalledWith(
       "/api/v1/logs/tags/stats",
       expect.anything(),
     );
+  });
 
+  it("getStats calls /api/v1/logs/stats", async () => {
     await getStats();
-    expect(fetchSpy).toHaveBeenLastCalledWith(
+    expect(fetchSpy).toHaveBeenCalledWith(
       "/api/v1/logs/stats",
       expect.anything(),
     );
@@ -221,22 +209,20 @@ describe("endpoint URL generators and query parameter serialization", () => {
       purgeSoftDeleted: false,
     });
 
-    const calledUrl = fetchSpy.mock.calls[0][0] as string;
-    expect(calledUrl).toContain("/api/v1/logs/cleanup?");
-    expect(calledUrl).toContain("retentionDays=30");
-    expect(calledUrl).toContain("dryRun=true");
-    expect(calledUrl).toContain("purgeSoftDeleted=false");
-  });
-
-  it("listUsers and updateUserRole call /api/v1/users", async () => {
-    await listUsers();
-    expect(fetchSpy).toHaveBeenLastCalledWith(
-      "/api/v1/users",
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/v1/logs/cleanup?retentionDays=30&dryRun=true&purgeSoftDeleted=false",
       expect.anything(),
     );
+  });
 
+  it("listUsers calls /api/v1/users", async () => {
+    await listUsers();
+    expect(fetchSpy).toHaveBeenCalledWith("/api/v1/users", expect.anything());
+  });
+
+  it("updateUserRole sends PATCH with role payload to /api/v1/users/:id/role", async () => {
     await updateUserRole("user-1", "admin");
-    expect(fetchSpy).toHaveBeenLastCalledWith(
+    expect(fetchSpy).toHaveBeenCalledWith(
       "/api/v1/users/user-1/role",
       expect.objectContaining({
         method: "PATCH",
@@ -245,39 +231,42 @@ describe("endpoint URL generators and query parameter serialization", () => {
     );
   });
 
-  it("getGithubAuthUrl, completeGithubLogin, and logout", async () => {
+  it("getGithubAuthUrl returns authorization URL", async () => {
     fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          authorizationUrl:
-            "https://github.com/login/oauth/authorize?state=xyz",
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+      Response.json({
+        authorizationUrl: "https://github.com/login/oauth/authorize?state=xyz",
+      }),
     );
+
     const authUrl = await getGithubAuthUrl();
     expect(authUrl).toBe("https://github.com/login/oauth/authorize?state=xyz");
-
-    fetchSpy.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          accessToken: "new-access-token",
-          tokenType: "bearer",
-          expiresIn: 900,
-          refreshToken: null,
-          user: null,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/v1/auth/login",
+      expect.anything(),
     );
-    await completeGithubLogin("code-abc", "state-def");
-    const callbackCall = fetchSpy.mock.calls[fetchSpy.mock.calls.length - 1];
-    expect(callbackCall[0]).toContain("/api/v1/auth/callback?");
-    expect(callbackCall[0]).toContain("code=code-abc");
-    expect(callbackCall[0]).toContain("state=state-def");
+  });
 
+  it("completeGithubLogin passes code and state query params", async () => {
+    fetchSpy.mockResolvedValueOnce(
+      Response.json({
+        accessToken: "new-access-token",
+        tokenType: "bearer",
+        expiresIn: 900,
+        refreshToken: null,
+        user: null,
+      }),
+    );
+
+    await completeGithubLogin("code-abc", "state-def");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/v1/auth/callback?code=code-abc&state=state-def",
+      expect.anything(),
+    );
+  });
+
+  it("logout sends POST to /api/v1/auth/logout", async () => {
     await logout();
-    expect(fetchSpy).toHaveBeenLastCalledWith(
+    expect(fetchSpy).toHaveBeenCalledWith(
       "/api/v1/auth/logout",
       expect.objectContaining({ method: "POST" }),
     );
@@ -306,10 +295,7 @@ describe("endpoint URL generators and query parameter serialization", () => {
       services: { database: "healthy", drive: "down" },
     };
     fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify(degradedHealth), {
-        status: 503,
-        headers: { "Content-Type": "application/json" },
-      }),
+      Response.json(degradedHealth, { status: 503 }),
     );
 
     const result = await getHealth();

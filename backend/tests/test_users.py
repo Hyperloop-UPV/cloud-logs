@@ -112,18 +112,24 @@ class TestUsersAPI(IsolatedAsyncioTestCase):
 
     def test_get_user_by_id_own_profile(self):
         """Users can read their own profile via /users/{id}."""
-        res = self.client.get(f"/api/v1/users/{self.user_id}", headers=self.user_headers)
+        res = self.client.get(
+            f"/api/v1/users/{self.user_id}", headers=self.user_headers
+        )
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["username"], "standard_user")
 
     def test_get_user_by_id_other_profile_as_user_forbidden(self):
         """Non-admin users cannot read another user's profile via /users/{id}."""
-        res = self.client.get(f"/api/v1/users/{self.other_user_id}", headers=self.user_headers)
+        res = self.client.get(
+            f"/api/v1/users/{self.other_user_id}", headers=self.user_headers
+        )
         self.assertEqual(res.status_code, 403)
 
     def test_get_user_by_id_other_profile_as_admin_allowed(self):
         """Admins can read any user's profile via /users/{id}."""
-        res = self.client.get(f"/api/v1/users/{self.other_user_id}", headers=self.admin_headers)
+        res = self.client.get(
+            f"/api/v1/users/{self.other_user_id}", headers=self.admin_headers
+        )
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["username"], "another_user")
 
@@ -210,13 +216,19 @@ class TestUsersAPI(IsolatedAsyncioTestCase):
                 headers=self.master_headers,
             )
             self.assertEqual(res.status_code, 400)
-            self.assertIn("Cannot demote the last remaining administrator", res.json()["detail"])
+            self.assertIn(
+                "Cannot demote the last remaining administrator", res.json()["detail"]
+            )
 
     def test_get_current_user_me_system_caller_without_user(self):
         """GET /api/v1/users/me returns 401 when context has no user and is not master."""
         from app.dependencies import AuthContext, get_current_auth
 
-        app.dependency_overrides[get_current_auth] = lambda: AuthContext(user=None, is_master=False)
+        app.dependency_overrides[get_current_auth] = lambda: AuthContext(
+            user=None, is_master=False
+        )
         res = self.client.get("/api/v1/users/me")
         self.assertEqual(res.status_code, 401)
-        self.assertIn("User profile not available for system callers", res.json()["detail"])
+        self.assertIn(
+            "User profile not available for system callers", res.json()["detail"]
+        )

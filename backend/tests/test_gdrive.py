@@ -3,7 +3,9 @@
 import asyncio
 import json
 import tempfile
+from contextlib import contextmanager
 from datetime import UTC, datetime
+from typing import Any
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -18,6 +20,39 @@ from app.core.gdrive import (
     get_gdrive_service,
     get_year_month_folder,
 )
+
+_TEST_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_TEST_PRIVATE_KEY_PEM = _TEST_PRIVATE_KEY.private_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PrivateFormat.PKCS8,
+    encryption_algorithm=serialization.NoEncryption(),
+).decode("utf-8")
+
+
+@contextmanager
+def mock_service_account_file(extra_fields: dict[str, Any] | None = None):
+    """Context manager to create and clean up a temporary service account JSON credentials file."""
+    payload = {
+        "type": "service_account",
+        "client_email": "test-sa@hyperloop.iam.gserviceaccount.com",
+        "private_key": _TEST_PRIVATE_KEY_PEM,
+        "token_uri": "https://oauth2.googleapis.com/token",
+    }
+    if extra_fields:
+        payload.update(extra_fields)
+    with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
+        json.dump(payload, f)
+        f.flush()
+        yield f.name
+
+
+def make_mock_httpx_client(**kwargs: Any) -> AsyncMock:
+    """Create a mock httpx.AsyncClient configured for async context manager usage."""
+    mock_client = AsyncMock()
+    mock_client.__aenter__.return_value = mock_client
+    for key, value in kwargs.items():
+        setattr(mock_client, key, value)
+    return mock_client
 
 
 class TestGoogleDriveService(IsolatedAsyncioTestCase):
@@ -110,32 +145,13 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
 
     async def test_real_oauth_token_exchange_and_cache(self):
         """Verify JWT generation and token exchange with Google OAuth token endpoint."""
-        pk = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        pem = pk.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        ).decode("utf-8")
-
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
-            json.dump(
-                {
-                    "type": "service_account",
-                    "client_email": "test-sa@hyperloop.iam.gserviceaccount.com",
-                    "private_key": pem,
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                },
-                f,
-            )
-            f.flush()
-
+        with mock_service_account_file() as sa_path:
             service = GoogleDriveService(
-                service_account_path=f.name, simulation_mode=False
+                service_account_path=sa_path, simulation_mode=False
             )
             self.assertTrue(service.has_credentials)
 
-            mock_client = AsyncMock()
-            mock_client.__aenter__.return_value = mock_client
+            mock_client = make_mock_httpx_client()
             mock_client.post.return_value = httpx.Response(
                 200, json={"access_token": "ya29.mock_token_123", "expires_in": 3600}
             )
@@ -153,28 +169,11 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
 
     async def test_real_oauth_token_exchange_failure(self):
         """When Google OAuth returns HTTP 400/401, raise 502 Bad Gateway."""
-        pk = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        pem = pk.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        ).decode("utf-8")
-
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
-            json.dump(
-                {
-                    "client_email": "test-sa@hyperloop.iam.gserviceaccount.com",
-                    "private_key": pem,
-                },
-                f,
-            )
-            f.flush()
-
+        with mock_service_account_file() as sa_path:
             service = GoogleDriveService(
-                service_account_path=f.name, simulation_mode=False
+                service_account_path=sa_path, simulation_mode=False
             )
-            mock_client = AsyncMock()
-            mock_client.__aenter__.return_value = mock_client
+            mock_client = make_mock_httpx_client()
             mock_client.post.return_value = httpx.Response(400, text="invalid_grant")
 
             with patch("httpx.AsyncClient", return_value=mock_client):
@@ -189,8 +188,7 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
         service._token_expires_at = 9999999999
         service.root_folder_id = "root_parent_id"
 
-        mock_client = AsyncMock()
-        mock_client.__aenter__.return_value = mock_client
+        mock_client = make_mock_httpx_client()
 
         with (
             patch.object(GoogleDriveService, "has_credentials", True),
@@ -222,8 +220,7 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
         service._token_expires_at = 9999999999
         service._folder_cache["2026_10"] = "folder_123"
 
-        mock_client = AsyncMock()
-        mock_client.__aenter__.return_value = mock_client
+        mock_client = make_mock_httpx_client()
         mock_client.post.return_value = httpx.Response(
             200,
             headers={
@@ -254,8 +251,7 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
         service._token_expires_at = 9999999999
         service._folder_cache["2026_10"] = "folder_123"
 
-        mock_client = AsyncMock()
-        mock_client.__aenter__.return_value = mock_client
+        mock_client = make_mock_httpx_client()
 
         with (
             patch.object(GoogleDriveService, "has_credentials", True),
@@ -318,34 +314,17 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
 
     async def test_concurrent_get_access_token_uses_lock(self):
         """Concurrent calls to _get_access_token only exchange OAuth credentials once."""
-        pk = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        pem = pk.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption(),
-        ).decode("utf-8")
-
-        with tempfile.NamedTemporaryFile("w+", suffix=".json") as f:
-            json.dump(
-                {
-                    "client_email": "test-sa@hyperloop.iam.gserviceaccount.com",
-                    "private_key": pem,
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                },
-                f,
-            )
-            f.flush()
-
+        with mock_service_account_file() as sa_path:
             service = GoogleDriveService(
-                service_account_path=f.name, simulation_mode=False
+                service_account_path=sa_path, simulation_mode=False
             )
-            mock_client = AsyncMock()
-            mock_client.__aenter__.return_value = mock_client
+            mock_client = make_mock_httpx_client()
 
             async def mock_post(*args, **kwargs):
                 await asyncio.sleep(0.01)
                 return httpx.Response(
-                    200, json={"access_token": "ya29.concurrency_token", "expires_in": 3600}
+                    200,
+                    json={"access_token": "ya29.concurrency_token", "expires_in": 3600},
                 )
 
             mock_client.post.side_effect = mock_post
@@ -375,8 +354,7 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
         service._token_expires_at = 9999999999
         service.root_folder_id = "root_parent_id"
 
-        mock_client = AsyncMock()
-        mock_client.__aenter__.return_value = mock_client
+        mock_client = make_mock_httpx_client()
 
         async def mock_get(*args, **kwargs):
             await asyncio.sleep(0.01)

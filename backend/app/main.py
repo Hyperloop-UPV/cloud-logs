@@ -39,7 +39,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
-
 app = FastAPI(
     title="Cloud Logs API",
     description="Telemetry and log catalog management service.",

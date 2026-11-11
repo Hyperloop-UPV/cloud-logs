@@ -50,7 +50,9 @@ def create_access_token(
     elif "role" in payload:
         payload.setdefault("permissions", [payload["role"]])
     elif "permissions" in payload:
-        payload.setdefault("role", "admin" if "admin" in payload["permissions"] else "user")
+        payload.setdefault(
+            "role", "admin" if "admin" in payload["permissions"] else "user"
+        )
     else:
         payload.setdefault("role", "user")
         payload.setdefault("permissions", ["user"])
@@ -104,9 +106,7 @@ def hash_token(token: str) -> str:
 
 def get_refresh_token_expiry() -> datetime:
     """Calculate refresh token expiration date (90 days default)."""
-    return datetime.now(UTC) + timedelta(
-        days=settings.refresh_token_expire_days
-    )
+    return datetime.now(UTC) + timedelta(days=settings.refresh_token_expire_days)
 
 
 def verify_master_key(candidate: str) -> bool:

@@ -77,13 +77,18 @@ class Settings(BaseSettings):
         }
 
         if self.environment.lower() == "production":
-            if not self.jwt_secret or self.jwt_secret in KNOWN_INSECURE_SECRETS or len(self.jwt_secret) < 32:
+            if (
+                not self.jwt_secret
+                or self.jwt_secret in KNOWN_INSECURE_SECRETS
+                or len(self.jwt_secret) < 32
+            ):
                 raise ValueError(
                     "In production, JWT_SECRET must be set to a secure secret of at least 32 characters, "
                     "and cannot be a development default."
                 )
             if (not self.master_api_key and not self.master_api_key_hash) or (
-                self.master_api_key and self.master_api_key in KNOWN_INSECURE_MASTER_KEYS
+                self.master_api_key
+                and self.master_api_key in KNOWN_INSECURE_MASTER_KEYS
             ):
                 raise ValueError(
                     "In production, MASTER_API_KEY or MASTER_API_KEY_HASH must be configured with a secure key."

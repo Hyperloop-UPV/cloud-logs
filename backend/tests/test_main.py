@@ -1,5 +1,6 @@
 """Tests for app/main.py routes, exception handlers, and lifespan lifecycle."""
 
+from contextlib import asynccontextmanager
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -53,6 +54,7 @@ class TestMainApp(IsolatedAsyncioTestCase):
         res = await global_exception_handler(request, exc)
         self.assertEqual(res.status_code, 500)
         import json
+
         body = json.loads(res.body.decode())
         self.assertEqual(body["error"], "Internal Server Error")
         self.assertIn("unexpected error", body["message"])
@@ -62,12 +64,19 @@ class TestMainApp(IsolatedAsyncioTestCase):
         request.method = "POST"
         request.url.path = "/validation/path"
         exc = RequestValidationError(
-            errors=[{"loc": ("body", "test_field"), "msg": "field required", "type": "missing"}]
+            errors=[
+                {
+                    "loc": ("body", "test_field"),
+                    "msg": "field required",
+                    "type": "missing",
+                }
+            ]
         )
 
         res = await validation_exception_handler(request, exc)
         self.assertEqual(res.status_code, 422)
         import json
+
         body = json.loads(res.body.decode())
         self.assertEqual(body["error"], "Validation Error")
 
@@ -86,3 +95,38 @@ class TestMainApp(IsolatedAsyncioTestCase):
 
         mock_engine.begin.assert_called_once()
         mock_engine.dispose.assert_called_once()
+
+    def test_healthcheck_endpoint_healthy_and_503_degraded(self):
+        """Verify that health check returns 200 when connected and 503 when database fails."""
+
+        @asynccontextmanager
+        async def mock_ok_connect(*args, **kwargs):
+            mock_conn = AsyncMock()
+            yield mock_conn
+
+        @asynccontextmanager
+        async def mock_fail_connect(*args, **kwargs):
+            raise Exception("Database disk full or locked")
+            yield
+
+        with patch(
+            "sqlalchemy.ext.asyncio.AsyncEngine.connect", side_effect=mock_ok_connect
+        ):
+            for path in ("/health", "/api/v1/health"):
+                res_ok = self.client.get(path)
+                self.assertEqual(res_ok.status_code, 200)
+                data = res_ok.json()
+                self.assertEqual(data["status"], "healthy")
+                self.assertEqual(data["components"]["database"], "connected")
+
+        with patch(
+            "sqlalchemy.ext.asyncio.AsyncEngine.connect", side_effect=mock_fail_connect
+        ):
+            for path in ("/health", "/api/v1/health"):
+                res_degraded = self.client.get(path)
+                self.assertEqual(res_degraded.status_code, 503)
+                data = res_degraded.json()
+                self.assertEqual(data["status"], "degraded")
+                self.assertIn(
+                    "Database disk full or locked", data["components"]["database"]
+                )

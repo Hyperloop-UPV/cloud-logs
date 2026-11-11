@@ -1,9 +1,7 @@
 """Comprehensive integration tests running end-to-end against real SQLite in-memory."""
 
-import asyncio
 import hashlib
 import uuid
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
@@ -70,7 +68,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                     raise
 
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(simulation_mode=True)
+        app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
+            simulation_mode=True
+        )
 
         self.client = TestClient(app)
 
@@ -93,6 +93,31 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         app.dependency_overrides.clear()
         await self.engine.dispose()
 
+    async def seed_log(
+        self,
+        *,
+        file_name: str = "test.zip",
+        status: str = "ready",
+        file_size: int = 1024,
+        created_by: uuid.UUID | None = None,
+        created_at: datetime | None = None,
+        **kwargs,
+    ) -> Log:
+        """Helper to create and persist a Log with sensible defaults."""
+        async with self.session_factory() as session:
+            log_item = Log(
+                id=kwargs.pop("id", uuid.uuid4()),
+                file_name=file_name,
+                status=status,
+                file_size=file_size,
+                created_by=created_by or self.engineer_id,
+                created_at=created_at or datetime.now(UTC),
+                **kwargs,
+            )
+            session.add(log_item)
+            await session.commit()
+            return log_item
+
     def test_full_log_lifecycle_sqlite(self):
         """End-to-end test of the complete two-phase upload and query workflow."""
         # 1. Initiate upload
@@ -103,7 +128,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             "note": "Full lifecycle run",
             "clientMetadata": {"runNumber": 1},
         }
-        res_init = self.client.post("/api/v1/logs/initiate", json=payload, headers=self.eng_headers)
+        res_init = self.client.post(
+            "/api/v1/logs/initiate", json=payload, headers=self.eng_headers
+        )
         self.assertEqual(res_init.status_code, 200)
         data_init = res_init.json()
         log_id = data_init["id"]
@@ -163,7 +190,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(res_del.status_code, 204)
 
         # 8. Subsequent GET returns 404
-        res_deleted = self.client.get(f"/api/v1/logs/{log_id}", headers=self.eng_headers)
+        res_deleted = self.client.get(
+            f"/api/v1/logs/{log_id}", headers=self.eng_headers
+        )
         self.assertEqual(res_deleted.status_code, 404)
 
     def test_rbac_permission_enforcement(self):
@@ -191,11 +220,29 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             headers=self.eng_headers,
         )
         self.assertEqual(patch_res.status_code, 200)
-        self.assertEqual(self.client.get("/api/v1/logs", headers=self.eng_headers).status_code, 200)
-        self.assertEqual(self.client.get(f"/api/v1/logs/{log_id}", headers=self.eng_headers).status_code, 200)
-        self.assertEqual(self.client.get("/api/v1/logs/tags", headers=self.eng_headers).status_code, 200)
-        self.assertEqual(self.client.get("/api/v1/logs/stats", headers=self.eng_headers).status_code, 200)
-        self.assertEqual(self.client.get("/api/v1/logs?metadataQuery=secret", headers=self.eng_headers).status_code, 200)
+        self.assertEqual(
+            self.client.get("/api/v1/logs", headers=self.eng_headers).status_code, 200
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/logs/{log_id}", headers=self.eng_headers
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get("/api/v1/logs/tags", headers=self.eng_headers).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get("/api/v1/logs/stats", headers=self.eng_headers).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/v1/logs?metadataQuery=secret", headers=self.eng_headers
+            ).status_code,
+            200,
+        )
 
         # 3. Common user CANNOT perform admin actions (403 Forbidden)
         # 3a. Triggering cleanup
@@ -207,12 +254,18 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(res_users.status_code, 403)
 
         # 3d. Modifying user roles
-        res_role = self.client.patch(f"/api/v1/users/{self.admin_id}/role", json={"role": "user"}, headers=self.eng_headers)
+        res_role = self.client.patch(
+            f"/api/v1/users/{self.admin_id}/role",
+            json={"role": "user"},
+            headers=self.eng_headers,
+        )
         self.assertEqual(res_role.status_code, 403)
 
         # 4. Unauthenticated requests receive 401
         self.assertEqual(self.client.get("/api/v1/logs").status_code, 401)
-        self.assertEqual(self.client.post("/api/v1/logs/initiate", json={}).status_code, 401)
+        self.assertEqual(
+            self.client.post("/api/v1/logs/initiate", json={}).status_code, 401
+        )
 
     def test_abort_upload_workflow(self):
         """Test abort endpoint logic and state transitions."""
@@ -241,12 +294,16 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertIn("Hardware communication glitch", detail_res.json()["note"])
 
         # Cannot complete an aborted upload
-        comp_res = self.client.post(f"/api/v1/logs/{log_id}/complete", json={}, headers=self.eng_headers)
+        comp_res = self.client.post(
+            f"/api/v1/logs/{log_id}/complete", json={}, headers=self.eng_headers
+        )
         self.assertEqual(comp_res.status_code, 400)
         self.assertIn("has been aborted", comp_res.json()["detail"])
 
         # Aborting again is idempotent
-        repeat_abort = self.client.post(f"/api/v1/logs/{log_id}/abort", json={}, headers=self.eng_headers)
+        repeat_abort = self.client.post(
+            f"/api/v1/logs/{log_id}/abort", json={}, headers=self.eng_headers
+        )
         self.assertEqual(repeat_abort.status_code, 200)
         self.assertEqual(repeat_abort.json()["status"], "aborted")
 
@@ -270,7 +327,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertIn("not ready for download", down_pending.json()["detail"])
 
         # Complete the upload
-        comp_res = self.client.post(f"/api/v1/logs/{log_id}/complete", json={}, headers=self.eng_headers)
+        comp_res = self.client.post(
+            f"/api/v1/logs/{log_id}/complete", json={}, headers=self.eng_headers
+        )
         drive_url = comp_res.json()["driveUrl"]
 
         # Viewer can download: receives 307 redirect
@@ -283,58 +342,45 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(down_ready.headers["location"], drive_url)
 
         # Unauthenticated receives 401
-        self.assertEqual(self.client.get(f"/api/v1/logs/{log_id}/download").status_code, 401)
+        self.assertEqual(
+            self.client.get(f"/api/v1/logs/{log_id}/download").status_code, 401
+        )
 
-    def test_stats_aggregation(self):
+    async def test_stats_aggregation(self):
         """Test stats endpoint metrics across multiple statuses and folders."""
         now = datetime.now(UTC)
-
-        async def seed():
-            async with self.session_factory() as session:
-                l1 = Log(
-                    id=uuid.uuid4(),
-                    file_name="ready_01.zip",
-                    status="ready",
-                    drive_folder="2026_10",
-                    file_size=2000,
-                    tags=["pod", "bms"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l2 = Log(
-                    id=uuid.uuid4(),
-                    file_name="ready_02.zip",
-                    status="ready",
-                    drive_folder="2026_10",
-                    file_size=3000,
-                    tags=["pod", "telemetria"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l3 = Log(
-                    id=uuid.uuid4(),
-                    file_name="pending_01.zip",
-                    status="pending_upload",
-                    drive_folder="2026_09",
-                    file_size=5000,
-                    tags=["motor"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l4 = Log(
-                    id=uuid.uuid4(),
-                    file_name="aborted_01.zip",
-                    status="aborted",
-                    drive_folder="2026_09",
-                    file_size=1000,
-                    tags=["frenos"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                session.add_all([l1, l2, l3, l4])
-                await session.commit()
-
-        asyncio.run(seed())
+        await self.seed_log(
+            file_name="ready_01.zip",
+            status="ready",
+            drive_folder="2026_10",
+            file_size=2000,
+            tags=["pod", "bms"],
+            created_at=now,
+        )
+        await self.seed_log(
+            file_name="ready_02.zip",
+            status="ready",
+            drive_folder="2026_10",
+            file_size=3000,
+            tags=["pod", "telemetria"],
+            created_at=now,
+        )
+        await self.seed_log(
+            file_name="pending_01.zip",
+            status="pending_upload",
+            drive_folder="2026_09",
+            file_size=5000,
+            tags=["motor"],
+            created_at=now,
+        )
+        await self.seed_log(
+            file_name="aborted_01.zip",
+            status="aborted",
+            drive_folder="2026_09",
+            file_size=1000,
+            tags=["frenos"],
+            created_at=now,
+        )
 
         res = self.client.get("/api/v1/logs/stats", headers=self.viewer_headers)
         self.assertEqual(res.status_code, 200)
@@ -353,65 +399,69 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(data["topTags"][0]["tag"], "pod")
         self.assertEqual(data["topTags"][0]["count"], 2)
 
-    def test_sorting_and_client_metadata_admin_search(self):
+    async def test_sorting_and_client_metadata_admin_search(self):
         """Test sortBy / sortOrder and client metadata admin-only filtering."""
-        now = datetime.now(UTC)
-
-        async def seed():
-            async with self.session_factory() as session:
-                l1 = Log(
-                    id=uuid.uuid4(),
-                    file_name="alpha.zip",
-                    status="ready",
-                    file_size=100,
-                    client_metadata={"hostname": "pod-orin-01", "clientUser": "operator_pau", "runUuid": "run-abc"},
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l2 = Log(
-                    id=uuid.uuid4(),
-                    file_name="beta.zip",
-                    status="ready",
-                    file_size=500,
-                    client_metadata={"hostname": "bench-dyno-master", "clientUser": "test_engineer", "runUuid": "run-xyz"},
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                session.add_all([l1, l2])
-                await session.commit()
-
-        asyncio.run(seed())
+        await self.seed_log(
+            file_name="alpha.zip",
+            file_size=100,
+            client_metadata={
+                "hostname": "pod-orin-01",
+                "clientUser": "operator_pau",
+                "runUuid": "run-abc",
+            },
+        )
+        await self.seed_log(
+            file_name="beta.zip",
+            file_size=500,
+            client_metadata={
+                "hostname": "bench-dyno-master",
+                "clientUser": "test_engineer",
+                "runUuid": "run-xyz",
+            },
+        )
 
         # Test alphabetical sorting ascending
-        res_asc = self.client.get("/api/v1/logs?sortBy=fileName&sortOrder=asc", headers=self.eng_headers)
+        res_asc = self.client.get(
+            "/api/v1/logs?sortBy=fileName&sortOrder=asc", headers=self.eng_headers
+        )
         items_asc = res_asc.json()["items"]
         self.assertEqual(items_asc[0]["fileName"], "alpha.zip")
         self.assertEqual(items_asc[1]["fileName"], "beta.zip")
 
         # Test alphabetical sorting descending
-        res_desc = self.client.get("/api/v1/logs?sortBy=fileName&sortOrder=desc", headers=self.eng_headers)
+        res_desc = self.client.get(
+            "/api/v1/logs?sortBy=fileName&sortOrder=desc", headers=self.eng_headers
+        )
         items_desc = res_desc.json()["items"]
         self.assertEqual(items_desc[0]["fileName"], "beta.zip")
         self.assertEqual(items_desc[1]["fileName"], "alpha.zip")
 
         # Test size sorting
-        res_size = self.client.get("/api/v1/logs?sortBy=fileSize&sortOrder=desc", headers=self.eng_headers)
+        res_size = self.client.get(
+            "/api/v1/logs?sortBy=fileSize&sortOrder=desc", headers=self.eng_headers
+        )
         self.assertEqual(res_size.json()["items"][0]["fileSize"], 500)
 
         # Client metadata search by regular user (engineer/viewer) -> 200 OK
-        res_user_meta = self.client.get("/api/v1/logs?metadataQuery=pod-orin", headers=self.eng_headers)
+        res_user_meta = self.client.get(
+            "/api/v1/logs?metadataQuery=pod-orin", headers=self.eng_headers
+        )
         self.assertEqual(res_user_meta.status_code, 200)
         self.assertEqual(res_user_meta.json()["total"], 1)
         self.assertEqual(res_user_meta.json()["items"][0]["fileName"], "alpha.zip")
 
         # Client metadata search by admin -> 200 OK
-        res_admin = self.client.get("/api/v1/logs?metadataQuery=pod-orin", headers=self.admin_headers)
+        res_admin = self.client.get(
+            "/api/v1/logs?metadataQuery=pod-orin", headers=self.admin_headers
+        )
         self.assertEqual(res_admin.status_code, 200)
         self.assertEqual(res_admin.json()["total"], 1)
         self.assertEqual(res_admin.json()["items"][0]["fileName"], "alpha.zip")
 
         # Client metadata search by runUuid
-        res_uuid = self.client.get("/api/v1/logs?metadataQuery=run-xyz", headers=self.admin_headers)
+        res_uuid = self.client.get(
+            "/api/v1/logs?metadataQuery=run-xyz", headers=self.admin_headers
+        )
         self.assertEqual(res_uuid.status_code, 200)
         self.assertEqual(res_uuid.json()["total"], 1)
         self.assertEqual(res_uuid.json()["items"][0]["fileName"], "beta.zip")
@@ -462,47 +512,27 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         r5 = self.client.get("/api/v1/logs/not-a-valid-uuid", headers=self.eng_headers)
         self.assertEqual(r5.status_code, 422)
 
-    def test_advanced_filtering_and_pagination(self):
+    async def test_advanced_filtering_and_pagination(self):
         """Test multi-tag matching, exact tag isolation, date ranges, and pagination."""
-        now = datetime.now(UTC)
-
-        # Seed 3 distinct logs directly into database
-        async def seed():
-            async with self.session_factory() as session:
-                l1 = Log(
-                    id=uuid.uuid4(),
-                    file_name="battery_run.zip",
-                    status="ready",
-                    drive_folder="2026_10",
-                    tags=["bms", "pod"],
-                    note="High discharge battery test",
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l2 = Log(
-                    id=uuid.uuid4(),
-                    file_name="motor_dyno.zip",
-                    status="ready",
-                    drive_folder="2026_10",
-                    tags=["motor", "pod_v2"],
-                    note="Inverter test at 10000 RPM",
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l3 = Log(
-                    id=uuid.uuid4(),
-                    file_name="brakes_bench.zip",
-                    status="pending_upload",
-                    drive_folder="2026_09",
-                    tags=["frenos"],
-                    note="Pneumatic brake test",
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                session.add_all([l1, l2, l3])
-                await session.commit()
-
-        asyncio.run(seed())
+        await self.seed_log(
+            file_name="battery_run.zip",
+            drive_folder="2026_10",
+            tags=["bms", "pod"],
+            note="High discharge battery test",
+        )
+        await self.seed_log(
+            file_name="motor_dyno.zip",
+            drive_folder="2026_10",
+            tags=["motor", "pod_v2"],
+            note="Inverter test at 10000 RPM",
+        )
+        await self.seed_log(
+            file_name="brakes_bench.zip",
+            status="pending_upload",
+            drive_folder="2026_09",
+            tags=["frenos"],
+            note="Pneumatic brake test",
+        )
 
         # Exact tag isolation: searching for 'pod' should NOT match 'pod_v2'
         res_pod = self.client.get("/api/v1/logs?tags=pod", headers=self.eng_headers)
@@ -512,23 +542,31 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(data_pod["items"][0]["fileName"], "battery_run.zip")
 
         # Status filter
-        res_pending = self.client.get("/api/v1/logs?status=pending_upload", headers=self.eng_headers)
+        res_pending = self.client.get(
+            "/api/v1/logs?status=pending_upload", headers=self.eng_headers
+        )
         self.assertEqual(res_pending.status_code, 200)
         self.assertEqual(res_pending.json()["total"], 1)
         self.assertEqual(res_pending.json()["items"][0]["fileName"], "brakes_bench.zip")
 
         # Folder filter
-        res_folder = self.client.get("/api/v1/logs?driveFolder=2026_09", headers=self.eng_headers)
+        res_folder = self.client.get(
+            "/api/v1/logs?driveFolder=2026_09", headers=self.eng_headers
+        )
         self.assertEqual(res_folder.status_code, 200)
         self.assertEqual(res_folder.json()["total"], 1)
 
         # Pagination test: pageSize=2 on 3 items
-        res_p1 = self.client.get("/api/v1/logs?page=1&pageSize=2", headers=self.eng_headers)
+        res_p1 = self.client.get(
+            "/api/v1/logs?page=1&pageSize=2", headers=self.eng_headers
+        )
         self.assertEqual(res_p1.status_code, 200)
         self.assertEqual(len(res_p1.json()["items"]), 2)
         self.assertEqual(res_p1.json()["total"], 3)
 
-        res_p2 = self.client.get("/api/v1/logs?page=2&pageSize=2", headers=self.eng_headers)
+        res_p2 = self.client.get(
+            "/api/v1/logs?page=2&pageSize=2", headers=self.eng_headers
+        )
         self.assertEqual(res_p2.status_code, 200)
         self.assertEqual(len(res_p2.json()["items"]), 1)
 
@@ -536,13 +574,19 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         """Verify that soft-deleted logs are excluded from search, tags, and detail."""
         res_init = self.client.post(
             "/api/v1/logs/initiate",
-            json={"fileName": "to_be_deleted.zip", "fileSize": 100, "tags": ["ephemeral_tag"]},
+            json={
+                "fileName": "to_be_deleted.zip",
+                "fileSize": 100,
+                "tags": ["ephemeral_tag"],
+            },
             headers=self.eng_headers,
         )
         log_id = res_init.json()["id"]
 
         # Tag appears in list_tags
-        tags_before = self.client.get("/api/v1/logs/tags", headers=self.eng_headers).json()
+        tags_before = self.client.get(
+            "/api/v1/logs/tags", headers=self.eng_headers
+        ).json()
         self.assertIn("ephemeral_tag", tags_before)
 
         # Delete log
@@ -550,20 +594,34 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(del_res.status_code, 204)
 
         # Tag no longer appears in list_tags
-        tags_after = self.client.get("/api/v1/logs/tags", headers=self.eng_headers).json()
+        tags_after = self.client.get(
+            "/api/v1/logs/tags", headers=self.eng_headers
+        ).json()
         self.assertNotIn("ephemeral_tag", tags_after)
 
         # Detail returns 404
-        self.assertEqual(self.client.get(f"/api/v1/logs/{log_id}", headers=self.eng_headers).status_code, 404)
+        self.assertEqual(
+            self.client.get(
+                f"/api/v1/logs/{log_id}", headers=self.eng_headers
+            ).status_code,
+            404,
+        )
 
         # Updating deleted returns 404
         self.assertEqual(
-            self.client.patch(f"/api/v1/logs/{log_id}", json={"note": "new"}, headers=self.eng_headers).status_code,
+            self.client.patch(
+                f"/api/v1/logs/{log_id}", json={"note": "new"}, headers=self.eng_headers
+            ).status_code,
             404,
         )
 
         # Deleting again returns 404
-        self.assertEqual(self.client.delete(f"/api/v1/logs/{log_id}", headers=self.eng_headers).status_code, 404)
+        self.assertEqual(
+            self.client.delete(
+                f"/api/v1/logs/{log_id}", headers=self.eng_headers
+            ).status_code,
+            404,
+        )
 
     async def test_cleanup_workflow_and_retention_policy(self):
         """Verify that weekly cleanup removes only stale uncompleted uploads (> 30 days),
@@ -684,22 +742,26 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 expires_at=datetime.now(UTC) + timedelta(days=7),
             )
 
-            session.add_all([
-                log_old_pending,
-                log_old_aborted,
-                log_old_failed,
-                log_old_ready,
-                log_recent_pending,
-                log_recent_ready,
-                log_stale_deleted,
-                tok_expired,
-                tok_revoked,
-                tok_active,
-            ])
+            session.add_all(
+                [
+                    log_old_pending,
+                    log_old_aborted,
+                    log_old_failed,
+                    log_old_ready,
+                    log_recent_pending,
+                    log_recent_ready,
+                    log_stale_deleted,
+                    tok_expired,
+                    tok_revoked,
+                    tok_active,
+                ]
+            )
             await session.commit()
 
         # RBAC checks: viewer & engineer should be forbidden
-        res_viewer = self.client.post("/api/v1/logs/cleanup", headers=self.viewer_headers)
+        res_viewer = self.client.post(
+            "/api/v1/logs/cleanup", headers=self.viewer_headers
+        )
         self.assertEqual(res_viewer.status_code, 403)
 
         res_eng = self.client.post("/api/v1/logs/cleanup", headers=self.eng_headers)
@@ -740,7 +802,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(clean_data["orphanedCleaned"], 3)
         self.assertEqual(clean_data["tokensCleaned"], 2)
         self.assertFalse(clean_data["dryRun"])
-        self.assertIn("Cleanup complete: 3 uncompleted logs soft-deleted", clean_data["message"])
+        self.assertIn(
+            "Cleanup complete: 3 uncompleted logs soft-deleted", clean_data["message"]
+        )
 
         # Confirm database state after real cleanup
         async with self.session_factory() as session:
@@ -798,84 +862,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             purged_item = await session.get(Log, id_stale_deleted)
             self.assertIsNone(purged_item)
 
-    async def test_user_role_management_admin_and_master(self):
-        """Verify user role promotion/demotion:
-        - Common user cannot promote members (403).
-        - Admin can promote a user to admin or demote to user.
-        - Master Key can promote/demote directly.
-        - Invalid role returns 422.
-        - Listing users is restricted to admin."""
-        # 1. Create a normal user with 'user' role
-        target_id = uuid.uuid4()
-        async with self.session_factory() as session:
-            target_user = User(
-                id=target_id,
-                username="candidate_member",
-                github_username="candidate",
-                permissions=["user"],
-            )
-            session.add(target_user)
-            await session.commit()
-
-        # 2. Regular user (Alice) tries to promote -> 403 Forbidden
-        res_forbidden = self.client.patch(
-            f"/api/v1/users/{target_id}/role",
-            json={"role": "admin"},
-            headers=self.eng_headers,
-        )
-        self.assertEqual(res_forbidden.status_code, 403)
-
-        # 3. Regular user tries to list users -> 403 Forbidden
-        self.assertEqual(self.client.get("/api/v1/users", headers=self.eng_headers).status_code, 403)
-
-        # 4. Admin promotes user to 'admin' -> 200 OK
-        res_promote = self.client.patch(
-            f"/api/v1/users/{target_id}/role",
-            json={"role": "admin"},
-            headers=self.admin_headers,
-        )
-        self.assertEqual(res_promote.status_code, 200)
-        data = res_promote.json()
-        self.assertEqual(data["role"], "admin")
-        self.assertEqual(data["username"], "candidate_member")
-
-        # Confirm DB reflects new role
-        async with self.session_factory() as session:
-            db_u = await session.get(User, target_id)
-            self.assertIsNotNone(db_u)
-            assert db_u is not None
-            self.assertEqual(db_u.permissions, ["admin"])
-            self.assertEqual(db_u.role, "admin")
-
-        # 5. Master API Key demotes user back to 'user'
-        master_key = "hlp_secret_role_master_key"
-        master_hash = hashlib.sha256(master_key.encode("utf-8")).hexdigest()
-        with patch.object(settings, "master_api_key_hash", master_hash):
-            master_headers = {"X-API-Key": master_key}
-            res_demote = self.client.patch(
-                f"/api/v1/users/{target_id}/role",
-                json={"role": "user"},
-                headers=master_headers,
-            )
-            self.assertEqual(res_demote.status_code, 200)
-            self.assertEqual(res_demote.json()["role"], "user")
-
-        # 6. Invalid role returns 422
-        res_invalid = self.client.patch(
-            f"/api/v1/users/{target_id}/role",
-            json={"role": "superuser"},
-            headers=self.admin_headers,
-        )
-        self.assertEqual(res_invalid.status_code, 422)
-
-        # 7. Admin lists all users -> 200 OK
-        res_list = self.client.get("/api/v1/users", headers=self.admin_headers)
-        self.assertEqual(res_list.status_code, 200)
-        user_list = res_list.json()
-        usernames = [u["username"] for u in user_list]
-        self.assertIn("candidate_member", usernames)
-        self.assertIn("admin_charlie", usernames)
-
     def test_complete_upload_with_drive_file_id(self):
         """Verify that passing driveFileId in complete request directly sets file ID."""
         init_res = self.client.post(
@@ -901,23 +887,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(detail_data["driveFileId"], "custom_gdrive_file_abc123")
         self.assertIn("custom_gdrive_file_abc123", detail_data["driveUrl"])
 
-    def test_oauth_csrf_state_validation(self):
-        """Verify that OAuth callback rejects mismatched state when CSRF cookie is set."""
-        # 1. Call login to receive authorizationUrl and oauth_state cookie
-        login_res = self.client.get("/api/v1/auth/login")
-        self.assertEqual(login_res.status_code, 200)
-        state_cookie = login_res.cookies.get("oauth_state")
-        self.assertIsNotNone(state_cookie)
-
-        # 2. Call callback with tampered/wrong state -> 400 Bad Request
-        bad_cb = self.client.get(
-            "/api/v1/auth/callback?code=mock_code&state=tampered_state",
-            cookies={"oauth_state": state_cookie},
-        )
-        self.assertEqual(bad_cb.status_code, 400)
-        self.assertIn("CSRF validation failed", bad_cb.json()["detail"])
-
-    def test_file_date_persistence_and_sorting(self):
+    async def test_file_date_persistence_and_sorting(self):
         """Verify that fileDate is saved, returned in LogOut, and usable in sortBy."""
         res = self.client.post(
             "/api/v1/logs/initiate",
@@ -932,7 +902,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(res.status_code, 200)
         log_id = res.json()["id"]
 
-        detail = self.client.get(f"/api/v1/logs/{log_id}", headers=self.eng_headers).json()
+        detail = self.client.get(
+            f"/api/v1/logs/{log_id}", headers=self.eng_headers
+        ).json()
         self.assertIn("fileDate", detail)
         self.assertTrue(detail["fileDate"].startswith("2026-05-15"))
 
@@ -942,26 +914,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             headers=self.eng_headers,
         )
         self.assertEqual(search_res.status_code, 200)
-
-    def test_healthcheck_endpoint_healthy_and_503_degraded(self):
-        """Verify that health check returns 200 when connected and 503 when database fails."""
-        # 1. Healthy check returns 200
-        res_ok = self.client.get("/health")
-        self.assertEqual(res_ok.status_code, 200)
-        self.assertEqual(res_ok.json()["status"], "healthy")
-        self.assertEqual(res_ok.json()["components"]["database"], "connected")
-
-        # 2. Degraded check returns 503 Service Unavailable
-        @asynccontextmanager
-        async def mock_fail_connect(*args, **kwargs):
-            raise Exception("Database disk full or locked")
-            yield
-
-        with patch("sqlalchemy.ext.asyncio.AsyncEngine.connect", side_effect=mock_fail_connect):
-            res_degraded = self.client.get("/health")
-            self.assertEqual(res_degraded.status_code, 503)
-            self.assertEqual(res_degraded.json()["status"], "degraded")
-            self.assertIn("Database disk full or locked", res_degraded.json()["components"]["database"])
 
     async def test_refresh_token_rotation_end_to_end_sqlite(self):
         """Verify full Refresh Token Rotation lifecycle against real SQLite:
@@ -1068,73 +1020,41 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             subsequent_res.json()["detail"], "Refresh token has been revoked"
         )
 
-    async def test_oauth_org_rejection_forbidden(self):
-        """Verify that user not in github_org_name is rejected with 403 Forbidden."""
-        with (
-            patch.object(settings, "github_org_name", "Hyperloop-UPV"),
-            patch("app.api.v1.auth.exchange_code_for_token", return_value="gho_mock_token"),
-            patch("app.api.v1.auth.get_github_user_profile", return_value={"id": 999999, "login": "outsider"}),
-            patch("app.api.v1.auth.check_github_org_membership", return_value=False),
-        ):
-            res = self.client.get(
-                "/api/v1/auth/callback?code=valid_code&state=valid_state",
-                cookies={"oauth_state": "valid_state"},
-            )
-            self.assertEqual(res.status_code, 403)
-            self.assertIn("User is not a member", res.json()["detail"])
-
-    def test_log_duration_computation(self):
+    async def test_log_duration_computation(self):
         """Verify duration computed field on Log model and LogOut schema."""
         start = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
         end = datetime(2026, 10, 23, 10, 15, 30, 456000, tzinfo=UTC)
 
-        async def seed():
-            async with self.session_factory() as session:
-                l1 = Log(
-                    id=uuid.uuid4(),
-                    file_name="run_duration.zip",
-                    status="ready",
-                    file_size=1024,
-                    start_date=start,
-                    end_date=end,
-                    created_by=self.engineer_id,
-                )
-                l2 = Log(
-                    id=uuid.uuid4(),
-                    file_name="run_no_duration.zip",
-                    status="ready",
-                    file_size=512,
-                    created_by=self.engineer_id,
-                )
-                session.add_all([l1, l2])
-                await session.commit()
-                return l1.id, l2.id
-
-        l1_id, l2_id = asyncio.run(seed())
+        l1 = await self.seed_log(
+            file_name="run_duration.zip", file_size=1024, start_date=start, end_date=end
+        )
+        l2 = await self.seed_log(file_name="run_no_duration.zip", file_size=512)
 
         # Test GET /api/v1/logs/{id} for log with duration
-        res1 = self.client.get(f"/api/v1/logs/{l1_id}", headers=self.eng_headers)
+        res1 = self.client.get(f"/api/v1/logs/{l1.id}", headers=self.eng_headers)
         self.assertEqual(res1.status_code, 200)
         data1 = res1.json()
         self.assertNotIn("durationSeconds", data1)
         self.assertEqual(data1["duration"], 930.456)
 
         # Test GET /api/v1/logs/{id} for log without dates
-        res2 = self.client.get(f"/api/v1/logs/{l2_id}", headers=self.eng_headers)
+        res2 = self.client.get(f"/api/v1/logs/{l2.id}", headers=self.eng_headers)
         self.assertEqual(res2.status_code, 200)
         data2 = res2.json()
         self.assertNotIn("durationSeconds", data2)
         self.assertIsNone(data2["duration"])
 
         # Test search endpoint also includes duration
-        res_search = self.client.get("/api/v1/logs?textQuery=run_duration", headers=self.eng_headers)
+        res_search = self.client.get(
+            "/api/v1/logs?textQuery=run_duration", headers=self.eng_headers
+        )
         self.assertEqual(res_search.status_code, 200)
         items = res_search.json()["items"]
         self.assertEqual(len(items), 1)
         self.assertNotIn("durationSeconds", items[0])
         self.assertEqual(items[0]["duration"], 930.456)
 
-    def test_overlapping_date_filtering(self):
+    async def test_overlapping_date_filtering(self):
         """Verify overlapping interval date filters in search_logs instead of strict enclosure."""
         # Log A: 10:00 to 11:00
         # Log B: 10:30 to 12:00
@@ -1147,43 +1067,10 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         t1200 = datetime(2026, 10, 23, 12, 0, 0, tzinfo=UTC)
         t1300 = datetime(2026, 10, 23, 13, 0, 0, tzinfo=UTC)
 
-        async def seed():
-            async with self.session_factory() as session:
-                lA = Log(
-                    id=uuid.uuid4(),
-                    file_name="overlap_A.zip",
-                    status="ready",
-                    start_date=t1000,
-                    end_date=t1100,
-                    created_by=self.engineer_id,
-                )
-                lB = Log(
-                    id=uuid.uuid4(),
-                    file_name="overlap_B.zip",
-                    status="ready",
-                    start_date=t1030,
-                    end_date=t1200,
-                    created_by=self.engineer_id,
-                )
-                lC = Log(
-                    id=uuid.uuid4(),
-                    file_name="overlap_C.zip",
-                    status="ready",
-                    start_date=t1200,
-                    end_date=t1300,
-                    created_by=self.engineer_id,
-                )
-                lD = Log(
-                    id=uuid.uuid4(),
-                    file_name="overlap_D.zip",
-                    status="ready",
-                    file_date=t1045,
-                    created_by=self.engineer_id,
-                )
-                session.add_all([lA, lB, lC, lD])
-                await session.commit()
-
-        asyncio.run(seed())
+        await self.seed_log(file_name="overlap_A.zip", start_date=t1000, end_date=t1100)
+        await self.seed_log(file_name="overlap_B.zip", start_date=t1030, end_date=t1200)
+        await self.seed_log(file_name="overlap_C.zip", start_date=t1200, end_date=t1300)
+        await self.seed_log(file_name="overlap_D.zip", file_date=t1045)
 
         # Query interval: [10:45, 11:15]
         # lA (10:00-11:00) overlaps! (end_date 11:00 >= 10:45, start_date 10:00 <= 11:15)
@@ -1201,69 +1088,48 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertIn("overlap_D.zip", file_names)
         self.assertNotIn("overlap_C.zip", file_names)
 
-    def test_rich_stats_and_tag_metrics(self):
+    async def test_rich_stats_and_tag_metrics(self):
         """Verify needs_attention, recent_uploads, uploads_per_month, tag_details, and /tags/stats."""
         now = datetime(2026, 11, 8, 12, 0, 0, tzinfo=UTC)
 
-        async def seed():
-            async with self.session_factory() as session:
-                # June 2026 log
-                l_jun = Log(
-                    id=uuid.uuid4(),
-                    file_name="jun_log.zip",
-                    status="ready",
-                    drive_folder="2026_06",
-                    file_size=1000,
-                    tags=["pcu", "debug"],
-                    created_by=self.engineer_id,
-                    created_at=datetime(2026, 6, 15, 10, 0, 0, tzinfo=UTC),
-                )
-                # July 2026 log
-                l_jul = Log(
-                    id=uuid.uuid4(),
-                    file_name="jul_log.zip",
-                    status="pending_upload",
-                    drive_folder="2026_07",
-                    file_size=2000,
-                    tags=["pcu", "bench"],
-                    created_by=self.engineer_id,
-                    created_at=datetime(2026, 7, 20, 10, 0, 0, tzinfo=UTC),
-                )
-                # November 2026 logs
-                l_nov1 = Log(
-                    id=uuid.uuid4(),
-                    file_name="nov_ready.zip",
-                    status="ready",
-                    drive_folder="2026_11",
-                    file_size=3000,
-                    tags=["bms", "pcu"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l_nov2 = Log(
-                    id=uuid.uuid4(),
-                    file_name="nov_failed.zip",
-                    status="failed",
-                    drive_folder="2026_11",
-                    file_size=500,
-                    tags=["bms"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                l_nov3 = Log(
-                    id=uuid.uuid4(),
-                    file_name="nov_aborted.zip",
-                    status="aborted",
-                    drive_folder="2026_11",
-                    file_size=500,
-                    tags=["debug"],
-                    created_by=self.engineer_id,
-                    created_at=now,
-                )
-                session.add_all([l_jun, l_jul, l_nov1, l_nov2, l_nov3])
-                await session.commit()
-
-        asyncio.run(seed())
+        await self.seed_log(
+            file_name="jun_log.zip",
+            drive_folder="2026_06",
+            file_size=1000,
+            tags=["pcu", "debug"],
+            created_at=datetime(2026, 6, 15, 10, 0, 0, tzinfo=UTC),
+        )
+        await self.seed_log(
+            file_name="jul_log.zip",
+            status="pending_upload",
+            drive_folder="2026_07",
+            file_size=2000,
+            tags=["pcu", "bench"],
+            created_at=datetime(2026, 7, 20, 10, 0, 0, tzinfo=UTC),
+        )
+        await self.seed_log(
+            file_name="nov_ready.zip",
+            drive_folder="2026_11",
+            file_size=3000,
+            tags=["bms", "pcu"],
+            created_at=now,
+        )
+        await self.seed_log(
+            file_name="nov_failed.zip",
+            status="failed",
+            drive_folder="2026_11",
+            file_size=500,
+            tags=["bms"],
+            created_at=now,
+        )
+        await self.seed_log(
+            file_name="nov_aborted.zip",
+            status="aborted",
+            drive_folder="2026_11",
+            file_size=500,
+            tags=["debug"],
+            created_at=now,
+        )
 
         # 1. Test /api/v1/logs/stats
         stats_res = self.client.get("/api/v1/logs/stats", headers=self.eng_headers)
@@ -1285,7 +1151,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         for idx in range(len(uploads_per_month) - 1):
             curr = uploads_per_month[idx]
             nxt = uploads_per_month[idx + 1]
-            self.assertLessEqual((curr["year"], curr["month"]), (nxt["year"], nxt["month"]))
+            self.assertLessEqual(
+                (curr["year"], curr["month"]), (nxt["year"], nxt["month"])
+            )
 
         # Verify month labels and counts
         jun_stat = next(m for m in uploads_per_month if m["folder"] == "2026_06")
@@ -1309,7 +1177,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertIn("bms", used_with_tags)
 
         # 2. Test GET /api/v1/logs/tags/stats
-        tags_stats_res = self.client.get("/api/v1/logs/tags/stats", headers=self.eng_headers)
+        tags_stats_res = self.client.get(
+            "/api/v1/logs/tags/stats", headers=self.eng_headers
+        )
         self.assertEqual(tags_stats_res.status_code, 200)
         ts_data = tags_stats_res.json()
         self.assertIn("totalTags", ts_data)
@@ -1317,18 +1187,23 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertIn("tags", ts_data)
         self.assertEqual(ts_data["totalTags"], len(ts_data["tags"]))
         # Total size is sum of tag sizes
-        self.assertEqual(ts_data["totalSize"], sum(t["totalSize"] for t in ts_data["tags"]))
+        self.assertEqual(
+            ts_data["totalSize"], sum(t["totalSize"] for t in ts_data["tags"])
+        )
 
         # 3. Test GET /api/v1/logs/tags?detailed=true
-        detailed_tags_res = self.client.get("/api/v1/logs/tags?detailed=true", headers=self.eng_headers)
+        detailed_tags_res = self.client.get(
+            "/api/v1/logs/tags?detailed=true", headers=self.eng_headers
+        )
         self.assertEqual(detailed_tags_res.status_code, 200)
         dt_data = detailed_tags_res.json()
         self.assertIn("totalTags", dt_data)
         self.assertIn("tags", dt_data)
 
         # 4. Test GET /api/v1/logs/tags?detailed=false returns plain list of strings
-        plain_tags_res = self.client.get("/api/v1/logs/tags?detailed=false", headers=self.eng_headers)
+        plain_tags_res = self.client.get(
+            "/api/v1/logs/tags?detailed=false", headers=self.eng_headers
+        )
         self.assertEqual(plain_tags_res.status_code, 200)
         self.assertIsInstance(plain_tags_res.json(), list)
         self.assertIn("pcu", plain_tags_res.json())
-

@@ -26,6 +26,70 @@ function makeSampleLog(overrides: Partial<Log> = {}): Log {
   };
 }
 
+function parseCsv(csv: string): string[][] {
+  const text = csv.replace(/^\uFEFF/, "");
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const nextChar = text[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        currentCell += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        currentCell += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ",") {
+        currentRow.push(currentCell);
+        currentCell = "";
+      } else if (char === "\r" && nextChar === "\n") {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = "";
+        i++;
+      } else if (char === "\n") {
+        currentRow.push(currentCell);
+        rows.push(currentRow);
+        currentRow = [];
+        currentCell = "";
+      } else {
+        currentCell += char;
+      }
+    }
+  }
+
+  if (currentRow.length > 0 || currentCell.length > 0) {
+    currentRow.push(currentCell);
+    rows.push(currentRow);
+  }
+
+  return rows;
+}
+
+function parseCsvRows(csv: string): Record<string, string>[] {
+  const rows = parseCsv(csv);
+  if (rows.length < 2) return [];
+  const headers = rows[0];
+  return rows.slice(1).map((row) => {
+    const record: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      record[header] = row[index] ?? "";
+    });
+    return record;
+  });
+}
+
 describe("toCsv", () => {
   it("includes UTF-8 BOM and RFC 4180 CRLF line endings", () => {
     const csv = toCsv([]);
@@ -74,37 +138,25 @@ describe("toCsv", () => {
       createdAt: "2026-03-12T09:50:00Z",
     });
 
-    const csv = toCsv([logWithDates, logWithoutDates]);
-    expect(csv).toContain('"2026-03-12T10:00:00Z"');
-    expect(csv).toContain('"2026-03-12T11:00:00Z"');
-    expect(csv).toContain('"2026-03-12T11:05:00Z"');
+    const [row1, row2] = parseCsvRows(toCsv([logWithDates, logWithoutDates]));
 
-    // Missing dates are rendered as empty strings inside quotes `""`
-    const rows = csv
-      .replace(/^\uFEFF/, "")
-      .split("\r\n")
-      .filter(Boolean);
-    const row2 = rows[2].split(",");
-    // Column indices: startDate(7), endDate(8), completedAt(10)
-    expect(row2[7]).toBe('""');
-    expect(row2[8]).toBe('""');
-    expect(row2[10]).toBe('""');
+    expect(row1.startDate).toBe("2026-03-12T10:00:00Z");
+    expect(row1.endDate).toBe("2026-03-12T11:00:00Z");
+    expect(row1.completedAt).toBe("2026-03-12T11:05:00Z");
+    expect(row1.createdAt).toBe("2026-03-12T09:50:00Z");
+
+    expect(row2.startDate).toBe("");
+    expect(row2.endDate).toBe("");
+    expect(row2.completedAt).toBe("");
   });
 
   it("joins tags with single space and handles empty tags", () => {
     const log1 = makeSampleLog({ tags: ["bms", "vcu", "run-42"] });
     const log2 = makeSampleLog({ id: "log-2", tags: [] });
 
-    const csv = toCsv([log1, log2]);
-    expect(csv).toContain('"bms vcu run-42"');
-
-    const rows = csv
-      .replace(/^\uFEFF/, "")
-      .split("\r\n")
-      .filter(Boolean);
-    const row2Cols = rows[2].split(",");
-    // tags column index 4
-    expect(row2Cols[4]).toBe('""');
+    const [row1, row2] = parseCsvRows(toCsv([log1, log2]));
+    expect(row1.tags).toBe("bms vcu run-42");
+    expect(row2.tags).toBe("");
   });
 
   it("escapes quotes according to RFC 4180 by doubling them", () => {
@@ -113,38 +165,42 @@ describe("toCsv", () => {
     });
     const csv = toCsv([log]);
     expect(csv).toContain('"Note with ""double quotes"" and ""more"" quotes"');
+
+    const [row] = parseCsvRows(csv);
+    expect(row.note).toBe('Note with "double quotes" and "more" quotes');
   });
 
   it("handles commas without corrupting cell boundaries", () => {
     const log = makeSampleLog({
       note: "Field, with, multiple, commas",
     });
-    const csv = toCsv([log]);
-    expect(csv).toContain('"Field, with, multiple, commas"');
+    const [row] = parseCsvRows(toCsv([log]));
+    expect(row.note).toBe("Field, with, multiple, commas");
   });
 
   it("preserves newlines inside quoted cells", () => {
     const log = makeSampleLog({
       note: "Line 1\nLine 2\r\nLine 3",
     });
-    const csv = toCsv([log]);
-    expect(csv).toContain('"Line 1\nLine 2\r\nLine 3"');
+    const [row] = parseCsvRows(toCsv([log]));
+    expect(row.note).toBe("Line 1\nLine 2\r\nLine 3");
   });
 
-  it("guards against CSV/formula injection (=, +, -, @)", () => {
-    const dangerousLogs: Log[] = [
-      makeSampleLog({ id: "log-eq", fileName: "=SUM(A1:A10)" }),
-      makeSampleLog({ id: "log-plus", fileName: "+cmd|' /C calc'!A0" }),
-      makeSampleLog({ id: "log-minus", fileName: "-2026_telemetry.csv" }),
-      makeSampleLog({ id: "log-at", fileName: "@SUM(1+1)" }),
-    ];
-
-    const csv = toCsv(dangerousLogs);
-    expect(csv).toContain('"\'=SUM(A1:A10)"');
-    expect(csv).toContain("\"'+cmd|' /C calc'!A0\"");
-    expect(csv).toContain('"\'-2026_telemetry.csv"');
-    expect(csv).toContain('"\'@SUM(1+1)"');
-  });
+  it.each([
+    ["=", "=SUM(A1:A10)", "'=SUM(A1:A10)"],
+    ["+", "+cmd|' /C calc'!A0", "'+cmd|' /C calc'!A0"],
+    ["-", "-2026_telemetry.csv", "'-2026_telemetry.csv"],
+    ["@", "@SUM(1+1)", "'@SUM(1+1)"],
+  ])(
+    "guards against CSV/formula injection for %s prefix",
+    (_prefix, fileName, expected) => {
+      const log = makeSampleLog({ fileName });
+      const csv = toCsv([log]);
+      const [row] = parseCsvRows(csv);
+      expect(row.fileName).toBe(expected);
+      expect(csv).toContain(`"${expected}"`);
+    },
+  );
 
   it("handles null and empty optional fields", () => {
     const log = makeSampleLog({
@@ -154,17 +210,12 @@ describe("toCsv", () => {
       driveUrl: null,
       fileHash: null,
     });
-    const csv = toCsv([log]);
-    const row = csv
-      .replace(/^\uFEFF/, "")
-      .split("\r\n")[1]
-      .split(",");
-    // fileSize is col 3, note is col 5, driveFolder is col 11, driveUrl is 12, fileHash is 13
-    expect(row[3]).toBe('""');
-    expect(row[5]).toBe('""');
-    expect(row[11]).toBe('""');
-    expect(row[12]).toBe('""');
-    expect(row[13]).toBe('""');
+    const [row] = parseCsvRows(toCsv([log]));
+    expect(row.fileSize).toBe("");
+    expect(row.note).toBe("");
+    expect(row.driveFolder).toBe("");
+    expect(row.driveUrl).toBe("");
+    expect(row.fileHash).toBe("");
   });
 });
 
