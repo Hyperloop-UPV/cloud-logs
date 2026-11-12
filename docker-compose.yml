@@ -6,6 +6,9 @@ services:
     image: hyperloop-cloud-logs:latest
     container_name: cloud_logs_api
     user: "1002:1002"
+    networks:
+      - default
+      - caddy_net
     restart: unless-stopped
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${CLOUD_LOGS_PORT:-8000}:8000"
@@ -48,3 +51,7 @@ services:
       options:
         max-size: "20m"
         max-file: "5"
+
+networks:
+  caddy_net:
+    external: true
