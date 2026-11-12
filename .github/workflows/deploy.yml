@@ -1,0 +1,78 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate required production secrets
+        env:
+          GDRIVE_ROOT_FOLDER_ID: ${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          MASTER_API_KEY: ${{ secrets.MASTER_API_KEY }}
+          _GITHUB_CLIENT_ID: ${{ secrets._GITHUB_CLIENT_ID }}
+          _GITHUB_CLIENT_SECRET: ${{ secrets._GITHUB_CLIENT_SECRET }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          MISSING=""
+          [ -z "$GDRIVE_ROOT_FOLDER_ID" ] && MISSING="$MISSING GDRIVE_ROOT_FOLDER_ID"
+          [ -z "$GDRIVE_SERVICE_ACCOUNT_JSON" ] && MISSING="$MISSING GDRIVE_SERVICE_ACCOUNT_JSON"
+          [ -z "$JWT_SECRET" ] && MISSING="$MISSING JWT_SECRET"
+          [ -z "$MASTER_API_KEY" ] && MISSING="$MISSING MASTER_API_KEY"
+          [ -z "$_GITHUB_CLIENT_ID" ] && MISSING="$MISSING _GITHUB_CLIENT_ID"
+          [ -z "$_GITHUB_CLIENT_SECRET" ] && MISSING="$MISSING _GITHUB_CLIENT_SECRET"
+          [ -z "$SSH_HOST" ] && MISSING="$MISSING SSH_HOST"
+          [ -z "$SSH_KEY" ] && MISSING="$MISSING SSH_KEY"
+
+          if [ -n "$MISSING" ]; then
+            echo "::error::Deployment aborted: missing required secrets:$MISSING"
+            echo "Configure all required secrets in GitHub: Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER || 'root' }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH || '/opt/cloud-logs' }}
+            git pull origin main
+
+            # Generate Google Drive credentials
+            mkdir -p backend/credentials
+            printf '%s\n' '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > backend/credentials/service_account.json
+            chmod 600 backend/credentials/service_account.json
+
+            # Generate .env
+            cat << 'EOF' > .env
+            ENVIRONMENT=production
+            DATABASE_URL=sqlite+aiosqlite:////app/data/cloud_logs.db
+            GDRIVE_ROOT_FOLDER_ID=${{ secrets.GDRIVE_ROOT_FOLDER_ID }}
+            GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            MASTER_API_KEY=${{ secrets.MASTER_API_KEY }}
+            GITHUB_CLIENT_ID=${{ secrets._GITHUB_CLIENT_ID }}
+            GITHUB_CLIENT_SECRET=${{ secrets._GITHUB_CLIENT_SECRET }}
+            _GITHUB_CLIENT_ID=${{ secrets._GITHUB_CLIENT_ID }}
+            _GITHUB_CLIENT_SECRET=${{ secrets._GITHUB_CLIENT_SECRET }}
+            GITHUB_REDIRECT_URI=https://cloud-logs.hyperloopupv.com/api/v1/auth/github/callback
+            GITHUB_ORG_NAME=Hyperloop-UPV
+            EOF
+
+            docker compose up -d --build
+            docker compose ps

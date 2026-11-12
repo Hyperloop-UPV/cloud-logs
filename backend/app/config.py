@@ -19,8 +19,24 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 90
-    github_client_id: str = ""
-    github_client_secret: str = ""
+    github_client_id: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "GITHUB_CLIENT_ID",
+            "_GITHUB_CLIENT_ID",
+            "github_client_id",
+            "_github_client_id",
+        ),
+    )
+    github_client_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "GITHUB_CLIENT_SECRET",
+            "_GITHUB_CLIENT_SECRET",
+            "github_client_secret",
+            "_github_client_secret",
+        ),
+    )
     github_redirect_uri: str = "http://localhost:8000/api/v1/auth/github/callback"
     github_org_name: str | None = Field(
         default=None,
@@ -47,6 +63,13 @@ class Settings(BaseSettings):
     # Google Drive configuration
     gdrive_root_folder_id: str = ""
     gdrive_service_account_path: str = ""
+    gdrive_service_account_json: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "GDRIVE_SERVICE_ACCOUNT_JSON",
+            "gdrive_service_account_json",
+        ),
+    )
     gdrive_simulation_mode: bool = False
 
     # Weekly cleanup configuration (1 month retention)

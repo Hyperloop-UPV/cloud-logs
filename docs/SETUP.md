@@ -39,10 +39,13 @@ This guide details the step-by-step process for configuring Google Cloud (Google
 7. Go to the **Keys** tab:
    - Click **Add Key** > **Create new key**.
    - Select **JSON** as the key type and click **Create**.
-8. Save the downloaded JSON key file securely on your server (e.g., under `credentials/service_account.json`).
+8. Save the downloaded JSON key file securely on your server (e.g., under `backend/credentials/service_account.json`).
+   > **Security Note**: Never commit service account JSON files to git (`.gitignore` protects `credentials/*.json` and `service_account*.json`). For CI/CD and production container deployments, this JSON is stored directly as the `GDRIVE_SERVICE_ACCOUNT_JSON` GitHub secret (see [Section 5](#5-github-actions-cicd--secrets-configuration)).
 9. Update your `.env` file with the path:
    ```env
-   GDRIVE_SERVICE_ACCOUNT_PATH=credentials/service_account.json
+   GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json
+   # Or directly provide the JSON string:
+   # GDRIVE_SERVICE_ACCOUNT_JSON={"type": "service_account", ...}
    ```
 
 ---
@@ -138,3 +141,99 @@ GitHub OAuth provides Single Sign-On (SSO) and verifies that users belong to the
      }
    }
    ```
+
+---
+
+## 5. GitHub Actions CI/CD & Secrets Configuration
+
+Continuous Integration and Automated Deployment workflows are configured under `.github/workflows/`:
+- **`ci.yml`**: Triggers on push to `main` and on pull requests:
+  - **`backend`**: Sets up Python 3.13, caches pip dependencies, runs `ruff check .` linter, and runs `pytest -v`.
+  - **`frontend`**: Sets up Node.js 22, caches npm packages, runs `npm ci`, and runs `npm run check` (Prettier, Oxlint, Vitest, Vite build).
+- **`deploy.yml`**: Triggers on push to `main` (and manual `workflow_dispatch`):
+  - When `SSH_HOST` is configured, connects to remote VPS via SSH, pulls `main`, generates `service_account.json` (Opción A) and `.env`, and runs `docker compose up -d --build`.
+  - Zero magic, linear and directly debuggable.
+
+### 5.1. Required GitHub Repository Secrets
+
+Configure the following secrets in GitHub under **Repository Settings > Secrets and variables > Actions > New repository secret**:
+
+| Secret Name | Required | Description | Example / Value |
+|---|---|---|---|
+| `GDRIVE_ROOT_FOLDER_ID` | **Yes** | Root Google Drive folder ID for telemetry archives (Section 2.3) | `162-qb6nxKfuwwmu0kHVyjHQ2qW05ql1N` |
+| `GDRIVE_SERVICE_ACCOUNT_JSON` | **Yes** | Full raw JSON content of the Google Cloud Service Account key | `{"type": "service_account", ...}` |
+| `JWT_SECRET` | **Yes** | High-entropy key (>=32 chars) for signing authentication JWT tokens | Generate with `openssl rand -hex 32` |
+| `MASTER_API_KEY` | **Yes** | High-entropy secret for Control Station telemetry uploads & cron cleanup | Generate with `openssl rand -hex 32` |
+| `_GITHUB_CLIENT_ID` | **Yes** | GitHub OAuth Application Client ID (from Section 3) | e.g. `Ov23li98XyZ1...` |
+| `_GITHUB_CLIENT_SECRET` | **Yes** | GitHub OAuth Application Client Secret (from Section 3) | e.g. `4f3a9e1b2c...` |
+| `SSH_HOST` | Optional | Deployment VPS IP address or hostname (e.g. Contabo VPS) | `194.164.x.x` |
+| `SSH_USER` | Optional | SSH username for deployment login (defaults to `root`) | `root` or `deploy` |
+| `SSH_KEY` | Optional | Private SSH key matching the server's `~/.ssh/authorized_keys` | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `SSH_PORT` | Optional | SSH port on remote host (defaults to `22`) | `22` |
+| `DEPLOY_PATH` | Optional | Absolute deployment directory on remote host | `/opt/cloud-logs` |
+
+---
+
+### 5.2. Why `_GITHUB_CLIENT_ID` and `_GITHUB_CLIENT_SECRET` Have a Leading Underscore
+
+GitHub Actions enforces a strict platform naming rule:
+> **"Secret names must not start with the `GITHUB_` prefix, which is reserved for GitHub Actions internal use."**
+
+If you try to create a secret named `GITHUB_CLIENT_ID` or `GITHUB_CLIENT_SECRET`, the GitHub settings UI will reject it with an error.
+
+To resolve this limitation without friction:
+1. **Repository Secret Naming**: Name the secrets with a leading underscore: `_GITHUB_CLIENT_ID` and `_GITHUB_CLIENT_SECRET`.
+2. **Transparent Application Aliasing**: In `backend/app/config.py`, settings fields are configured with Pydantic `AliasChoices`:
+   ```python
+   github_client_id: str = Field(
+       default="",
+       validation_alias=AliasChoices(
+           "GITHUB_CLIENT_ID",
+           "_GITHUB_CLIENT_ID",
+           "github_client_id",
+           "_github_client_id",
+       ),
+   )
+   github_client_secret: str = Field(
+       default="",
+       validation_alias=AliasChoices(
+           "GITHUB_CLIENT_SECRET",
+           "_GITHUB_CLIENT_SECRET",
+           "github_client_secret",
+           "_github_client_secret",
+       ),
+   )
+   ```
+   This allows FastAPI to seamlessly recognize either name without requiring hardcoded conversions.
+3. **Automated Deployment Mapping**: The `deploy.yml` workflow writes both `GITHUB_CLIENT_ID` and `_GITHUB_CLIENT_ID` to `.env` and `docker-compose.yml`, guaranteeing compatibility with all tooling.
+
+---
+
+### 5.3. Managing Google Cloud Service Account Without Committing JSON Files
+
+Committing private key JSON files to git repositories poses an extreme security hazard. The `.gitignore` configuration prevents `credentials/*.json` and `service_account*.json` from ever being staged or committed.
+
+Cloud Logs provides two complementary, zero-commit approaches for supplying Google Drive service account credentials via the `GDRIVE_SERVICE_ACCOUNT_JSON` secret:
+
+#### Opción A: Deployment File Generation (Recommended & Default for Docker Compose)
+During workflow execution in `.github/workflows/deploy.yml`, the secret is written directly to the filesystem on the deployment host:
+```bash
+printf '%s\n' "$GDRIVE_SERVICE_ACCOUNT_JSON" > backend/credentials/service_account.json
+chmod 600 backend/credentials/service_account.json
+```
+- Docker Compose mounts `./backend/credentials` into the container as a read-only volume (`/app/credentials:ro`).
+- Inside the container, the application reads the file path configured in `GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json`.
+- The credentials file exists strictly on the server filesystem with restricted permissions (`600`) and is never tracked by git.
+
+#### Opción B: Direct In-Memory JSON String Injection
+The backend (`backend/app/core/gdrive.py`) natively supports receiving the credentials directly via the `GDRIVE_SERVICE_ACCOUNT_JSON` environment variable:
+```python
+if self.service_account_json:
+    sa_info = json.loads(self.service_account_json)
+else:
+    sa_info = json.loads(Path(self.service_account_path).read_text(encoding="utf-8"))
+```
+- If `GDRIVE_SERVICE_ACCOUNT_JSON` is passed into `.env` or container environment, `GoogleDriveService` deserializes the JSON string directly in memory upon startup.
+- No credential files need to be written to disk.
+- Both Opción A and Opción B work simultaneously and keep all credentials out of source control.
+

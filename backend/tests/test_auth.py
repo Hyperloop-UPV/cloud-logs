@@ -701,3 +701,14 @@ class TestProductionSettingsValidation(TestCase):
             allow_public_github_login=False,
         )
         self.assertEqual(s2.github_org_name, "Hyperloop-UPV")
+
+    def test_github_client_and_gdrive_aliases(self):
+        s = Settings(
+            _GITHUB_CLIENT_ID="gh_secret_alias_id",
+            _GITHUB_CLIENT_SECRET="gh_secret_alias_secret",
+            GDRIVE_SERVICE_ACCOUNT_JSON='{"test": 1}',
+        )
+        self.assertEqual(s.github_client_id, "gh_secret_alias_id")
+        self.assertEqual(s.github_client_secret, "gh_secret_alias_secret")
+        self.assertEqual(s.gdrive_service_account_json, '{"test": 1}')
+

@@ -167,6 +167,39 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
                 self.assertEqual(tok_cached, "ya29.mock_token_123")
                 self.assertEqual(mock_client.post.call_count, 1)
 
+    async def test_oauth_token_exchange_with_service_account_json(self):
+        """Verify that GoogleDriveService with service_account_json loads credentials, sets has_credentials = True, and generates access token correctly without needing a file on disk."""
+        sa_payload = {
+            "type": "service_account",
+            "client_email": "direct-json-sa@hyperloop.iam.gserviceaccount.com",
+            "private_key": _TEST_PRIVATE_KEY_PEM,
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+        sa_json = json.dumps(sa_payload)
+
+        # Service configured solely with service_account_json (service_account_path points to non-existent file)
+        service = GoogleDriveService(
+            service_account_path="/nonexistent/path/service_account.json",
+            service_account_json=sa_json,
+            simulation_mode=False,
+        )
+        self.assertTrue(service.has_credentials)
+
+        mock_client = make_mock_httpx_client()
+        mock_client.post.return_value = httpx.Response(
+            200, json={"access_token": "ya29.mock_json_token_direct", "expires_in": 3600}
+        )
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            tok = await service._get_access_token()
+            self.assertEqual(tok, "ya29.mock_json_token_direct")
+            self.assertEqual(mock_client.post.call_count, 1)
+
+            # Subsequent call uses cache
+            tok_cached = await service._get_access_token()
+            self.assertEqual(tok_cached, "ya29.mock_json_token_direct")
+            self.assertEqual(mock_client.post.call_count, 1)
+
     async def test_real_oauth_token_exchange_failure(self):
         """When Google OAuth returns HTTP 400/401, raise 502 Bad Gateway."""
         with mock_service_account_file() as sa_path:

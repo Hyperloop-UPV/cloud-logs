@@ -32,6 +32,7 @@ class GoogleDriveService:
         self,
         root_folder_id: str | None = None,
         service_account_path: str | None = None,
+        service_account_json: str | None = None,
         simulation_mode: bool | None = None,
     ) -> None:
         self.root_folder_id = (
@@ -43,6 +44,11 @@ class GoogleDriveService:
             service_account_path
             if service_account_path is not None
             else settings.gdrive_service_account_path
+        )
+        self.service_account_json = (
+            service_account_json
+            if service_account_json is not None
+            else settings.gdrive_service_account_json
         )
         self.simulation_mode = (
             simulation_mode
@@ -57,10 +63,12 @@ class GoogleDriveService:
 
     @property
     def has_credentials(self) -> bool:
-        """Check if service account credentials file exists and is valid."""
-        if not self.service_account_path:
-            return False
-        return Path(self.service_account_path).is_file()
+        """Check if service account credentials exist in JSON string or file."""
+        if bool(self.service_account_json):
+            return True
+        return bool(
+            self.service_account_path and Path(self.service_account_path).is_file()
+        )
 
     async def _get_access_token(self) -> str:
         """Retrieve or refresh Google OAuth2 access token for the service account."""
@@ -80,9 +88,12 @@ class GoogleDriveService:
                 return self._access_token
 
             try:
-                sa_info = json.loads(
-                    Path(self.service_account_path).read_text(encoding="utf-8")
-                )
+                if self.service_account_json:
+                    sa_info = json.loads(self.service_account_json)
+                else:
+                    sa_info = json.loads(
+                        Path(self.service_account_path).read_text(encoding="utf-8")
+                    )
 
                 client_email = sa_info.get("client_email")
                 private_key = sa_info.get("private_key")
