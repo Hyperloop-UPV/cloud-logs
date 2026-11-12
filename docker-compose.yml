@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     image: hyperloop-cloud-logs:latest
     container_name: cloud_logs_api
+    user: "1002:1002"
     restart: unless-stopped
     ports:
       - "${HOST_BIND_IP:-127.0.0.1}:${CLOUD_LOGS_PORT:-8000}:8000"

@@ -54,8 +54,10 @@ jobs:
             git pull origin main
 
             # Generate Google Drive credentials
-            mkdir -p backend/credentials
-            printf '%s\n' '${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}' > backend/credentials/service_account.json
+            mkdir -p backend/credentials backend/data
+            cat << 'EOF' > backend/credentials/service_account.json
+            ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+            EOF
             chmod 600 backend/credentials/service_account.json
 
             # Generate .env
