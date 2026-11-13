@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/cloud_logs.db"
     master_api_key: str | None = None
     master_api_key_hash: str | None = None
+    medium_api_key: str | None = None
+    medium_api_key_hash: str | None = None
     jwt_secret: str = "dev-secret-change-in-production-32b"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15

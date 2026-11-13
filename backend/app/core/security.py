@@ -131,6 +131,28 @@ def verify_master_key(candidate: str) -> bool:
     return False
 
 
+def verify_medium_key(candidate: str) -> bool:
+    """Verify an incoming API key against configured medium API key in constant time."""
+    if not candidate:
+        return False
+
+    clean_candidate = candidate.strip()
+
+    # Compare directly against medium_api_key if configured
+    medium_key = getattr(settings, "medium_api_key", None)
+    if medium_key and hmac.compare_digest(clean_candidate, medium_key):
+        return True
+
+    # Compare SHA-256 hash against medium_api_key_hash
+    medium_hash = getattr(settings, "medium_api_key_hash", None)
+    if medium_hash:
+        candidate_hash = hash_token(clean_candidate)
+        if hmac.compare_digest(candidate_hash, medium_hash):
+            return True
+
+    return False
+
+
 def log_master_key_usage(request: Request) -> None:
     """Audit log warning for usage of the Master API Key."""
     forwarded = request.headers.get("x-forwarded-for")
@@ -156,6 +178,31 @@ def log_master_key_usage(request: Request) -> None:
     )
 
 
+def log_medium_key_usage(request: Request) -> None:
+    """Audit log warning for usage of the Medium API Key."""
+    forwarded = request.headers.get("x-forwarded-for")
+    client_ip = (
+        forwarded.split(",")[0].strip()
+        if forwarded
+        else (request.client.host if request.client else "unknown")
+    )
+    user_agent = request.headers.get("user-agent", "unknown")
+    logger.warning(
+        "Medium API Key authenticated for %s %s from %s [User-Agent: %s]",
+        request.method,
+        request.url.path,
+        client_ip,
+        user_agent,
+        extra={
+            "event": "medium_api_key_authenticated",
+            "http_method": request.method,
+            "request_path": request.url.path,
+            "client_ip": client_ip,
+            "user_agent": user_agent,
+        },
+    )
+
+
 __all__ = [
     "create_access_token",
     "decode_access_token",
@@ -164,5 +211,7 @@ __all__ = [
     "get_refresh_token_expiry",
     "hash_token",
     "log_master_key_usage",
+    "log_medium_key_usage",
     "verify_master_key",
+    "verify_medium_key",
 ]

@@ -37,6 +37,10 @@ class LogInitiateRequest(CamelModel):
         default_factory=dict,
         description="Client system metadata (e.g. hostname, clientUser, runUuid, os, execution environment)",
     )
+    user: str | None = Field(
+        default=None,
+        description="GitHub username or profile URL (used when authenticating via medium API key)",
+    )
 
 
 class LogInitiateResponse(CamelModel):

@@ -47,6 +47,11 @@ async def get_current_user_profile(
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     """Retrieve currently authenticated user profile."""
+    if auth.is_medium:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Medium API key does not have access to user profiles",
+        )
     if not auth.user:
         if auth.is_master:
             return UserOut(
@@ -75,6 +80,11 @@ async def get_user_detail(
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     """Get single user profile."""
+    if auth.is_medium:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Medium API key does not have access to user profiles",
+        )
     # Common users can only view their own user profile; admins can view any
     if not auth.has_permission("admin") and (not auth.user or auth.user.id != id):
         raise HTTPException(

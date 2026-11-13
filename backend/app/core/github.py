@@ -145,9 +145,44 @@ async def check_github_org_membership(
     return False
 
 
+def parse_github_username(raw: str | None) -> str | None:
+    """Parse a GitHub username or GitHub profile URL into a clean GitHub username.
+
+    Examples:
+        - "octocat" -> "octocat"
+        - "@octocat" -> "octocat"
+        - "https://github.com/octocat" -> "octocat"
+        - "http://github.com/octocat/" -> "octocat"
+        - "github.com/octocat" -> "octocat"
+        - "https://github.com/octocat?tab=repositories" -> "octocat"
+    """
+    if not raw:
+        return None
+    val = raw.strip()
+    if not val:
+        return None
+
+    if "github.com" in val.lower():
+        if not val.startswith(("http://", "https://")):
+            val = "https://" + val
+        parsed = urllib.parse.urlparse(val)
+        path = parsed.path.strip("/")
+        parts = [p for p in path.split("/") if p]
+        if parts:
+            candidate = parts[0]
+        else:
+            return None
+    else:
+        candidate = val
+
+    candidate = candidate.lstrip("@").strip()
+    return candidate if candidate else None
+
+
 __all__ = [
     "check_github_org_membership",
     "exchange_code_for_token",
     "get_github_auth_url",
     "get_github_user_profile",
+    "parse_github_username",
 ]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import Callable, Coroutine
@@ -9,10 +10,17 @@ from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import decode_access_token, verify_master_key
+from app.core.github import parse_github_username
+from app.core.security import (
+    decode_access_token,
+    log_master_key_usage,
+    log_medium_key_usage,
+    verify_master_key,
+    verify_medium_key,
+)
 from app.db.session import get_db
 from app.models.user import User
 
@@ -26,14 +34,18 @@ class AuthContext:
         self,
         user: User | None = None,
         is_master: bool = False,
+        is_medium: bool = False,
     ):
         self.user = user
         self.is_master = is_master
+        self.is_medium = is_medium
 
     @property
     def role(self) -> str:
         if self.is_master:
             return "admin"
+        if self.is_medium:
+            return "medium"
         if self.user:
             return self.user.role
         return "user"
@@ -42,12 +54,18 @@ class AuthContext:
     def permissions(self) -> list[str]:
         if self.is_master:
             return ["*"]
+        if self.is_medium:
+            return ["user", "upload", "download"]
         return [self.role]
 
     def has_permission(self, permission: str) -> bool:
         """Check if context holds the requested permission or role."""
         if self.is_master:
             return True
+        if self.is_medium:
+            if permission == "admin":
+                return False
+            return permission in ("user", "upload", "download", "medium")
         current_role = self.role
         if current_role == "admin":
             return True
@@ -57,35 +75,73 @@ class AuthContext:
         return self.has_permission(role)
 
 
+async def _resolve_medium_auth(
+    request: Request,
+    db: AsyncSession,
+) -> AuthContext:
+    """Resolve authentication for medium_api_key, extracting and parsing optional user."""
+    log_medium_key_usage(request)
+
+    raw_user: str | None = request.headers.get("X-User") or request.query_params.get(
+        "user"
+    )
+    if not raw_user and request.method == "POST":
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type.lower():
+            try:
+                body_bytes = await request.body()
+                if body_bytes:
+                    body_json = json.loads(body_bytes)
+                    if isinstance(body_json, dict) and "user" in body_json:
+                        raw_user = body_json.get("user")
+            except (json.JSONDecodeError, UnicodeDecodeError) as err:
+                logger.debug("Failed to decode JSON body when extracting user: %s", err)
+
+    resolved_user: User | None = None
+    if raw_user:
+        username = parse_github_username(raw_user)
+        if not username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid 'user' parameter: unable to parse GitHub username",
+            )
+        stmt = select(User).where(
+            or_(
+                func.lower(User.github_username) == username.lower(),
+                func.lower(User.username) == username.lower(),
+            )
+        )
+        result = await db.execute(stmt)
+        resolved_user = result.scalar_one_or_none()
+        if resolved_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found. The user must sign in to the platform before logs can be uploaded on their behalf.",
+            )
+
+    return AuthContext(user=resolved_user, is_medium=True)
+
+
 async def get_current_auth(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> AuthContext:
-    """Authenticate request via Master API Key or Bearer JWT token."""
-    # 1. Check Master API Key in X-API-Key header
+    """Authenticate request via Master API Key, Medium API Key, or Bearer JWT token."""
+    # 1. Check API Key in X-API-Key header
     api_key = request.headers.get("X-API-Key")
     if api_key:
         if verify_master_key(api_key):
-            logger.warning(
-                "Master API Key authenticated for %s %s from %s",
-                request.method,
-                request.url.path,
-                request.client.host if request.client else "unknown",
-                extra={
-                    "event": "master_api_key_authenticated",
-                    "http_method": request.method,
-                    "request_path": request.url.path,
-                    "client_ip": request.client.host if request.client else "unknown",
-                },
-            )
+            log_master_key_usage(request)
             return AuthContext(is_master=True)
+        if verify_medium_key(api_key):
+            return await _resolve_medium_auth(request, db)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
-    # 2. Check Authorization Header (Bearer JWT or Master Key) or query param ?token=
+    # 2. Check Authorization Header (Bearer JWT / API Key) or query param ?token=
     auth_header = request.headers.get("Authorization")
     token = None
     if auth_header:
@@ -106,21 +162,13 @@ async def get_current_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # 3. Check if Bearer token matches Master API Key
+    # 3. Check if token matches Master API Key or Medium API Key
     if verify_master_key(token):
-        logger.warning(
-            "Master API Key authenticated via Bearer token for %s %s from %s",
-            request.method,
-            request.url.path,
-            request.client.host if request.client else "unknown",
-            extra={
-                "event": "master_api_key_authenticated",
-                "http_method": request.method,
-                "request_path": request.url.path,
-                "client_ip": request.client.host if request.client else "unknown",
-            },
-        )
+        log_master_key_usage(request)
         return AuthContext(is_master=True)
+
+    if verify_medium_key(token):
+        return await _resolve_medium_auth(request, db)
 
     # 4. Decode Bearer JWT access token
     try:

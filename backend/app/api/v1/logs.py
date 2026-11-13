@@ -32,6 +32,7 @@ from app.core.gdrive import (
     get_gdrive_service,
     get_year_month_folder,
 )
+from app.core.github import parse_github_username
 from app.db.session import get_db
 from app.dependencies import AuthContext, get_current_auth, require_permission
 from app.models.log import Log
@@ -63,9 +64,19 @@ router = APIRouter(tags=["Logs"])
 def check_log_modification_permission(log: Log, auth: AuthContext) -> None:
     """Ensure caller has permission to modify or delete the log:
     Must be Master API Key, an Admin user, or the owner/creator of the log.
+    Medium API key is only permitted to complete or abort an in-progress upload.
     """
     if auth.is_master or auth.has_permission("admin"):
         return
+    if auth.is_medium:
+        if log.status in ("pending_upload", "ready") and (
+            auth.user is None or log.created_by == auth.user.id
+        ):
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Medium API key is not permitted to modify or delete this log",
+        )
     if auth.user and log.created_by == auth.user.id:
         return
     raise HTTPException(
@@ -110,6 +121,38 @@ async def initiate_log_upload(
         log_id=log_id,
         client_origin=client_origin,
     )
+
+    if auth.is_medium and not auth.user:
+        raw_user = (
+            payload.user
+            or request.headers.get("X-User")
+            or request.query_params.get("user")
+        )
+        if not raw_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A 'user' field containing a GitHub username or profile URL is required when using the medium API key",
+            )
+        username = parse_github_username(raw_user)
+        if not username:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid 'user' field: unable to parse GitHub username",
+            )
+        stmt = select(User).where(
+            or_(
+                func.lower(User.github_username) == username.lower(),
+                func.lower(User.username) == username.lower(),
+            )
+        )
+        result = await db.execute(stmt)
+        resolved_user = result.scalar_one_or_none()
+        if resolved_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"User '{username}' not found. The user must sign in to the platform before logs can be uploaded on their behalf.",
+            )
+        auth.user = resolved_user
 
     creator_id = auth.user.id if auth.user else None
 
@@ -881,6 +924,12 @@ async def update_log(
     db: AsyncSession = Depends(get_db),
 ) -> LogOut:
     """Update log metadata."""
+    if auth.is_medium:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Medium API key is not permitted to modify logs",
+        )
+
     stmt = (
         select(Log)
         .where(Log.id == id, Log.deleted_at.is_(None))
@@ -921,6 +970,12 @@ async def delete_log(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Delete log entry."""
+    if auth.is_medium:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Medium API key is not permitted to delete logs",
+        )
+
     stmt = select(Log).where(Log.id == id, Log.deleted_at.is_(None))
     result = await db.execute(stmt)
     log = result.scalar_one_or_none()
