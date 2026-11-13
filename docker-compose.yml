@@ -52,6 +52,21 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  cloud-logs-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: hyperloop-cloud-logs-frontend:latest
+    container_name: cloud_logs_web
+    networks:
+      - caddy_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   caddy_net:
     external: true
