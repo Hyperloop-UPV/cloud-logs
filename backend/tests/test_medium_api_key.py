@@ -19,6 +19,7 @@ from fastapi import status
 from fastapi.testclient import TestClient
 
 from app.config import settings
+from app.core.gdrive import GoogleDriveService, get_gdrive_service
 from app.core.github import parse_github_username
 from app.core.security import hash_token, verify_medium_key
 from app.dependencies import AuthContext, get_db
@@ -114,12 +115,16 @@ class TestMediumKeyEndpointsIntegration(IsolatedAsyncioTestCase):
             github_username="testuser",
             role="user",
         )
+        app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
+            simulation_mode=True
+        )
 
     def tearDown(self):
         app.dependency_overrides.clear()
 
     async def test_initiate_upload_with_user_in_payload(self):
         mock_db = AsyncMock()
+        mock_db.add = MagicMock()
 
         # Mock user query result
         mock_result = MagicMock()
@@ -154,6 +159,7 @@ class TestMediumKeyEndpointsIntegration(IsolatedAsyncioTestCase):
 
     async def test_initiate_upload_with_x_user_header(self):
         mock_db = AsyncMock()
+        mock_db.add = MagicMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = self.test_user
         mock_db.execute.return_value = mock_result
