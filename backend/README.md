@@ -135,6 +135,7 @@ pytest --cov=app -v
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `15` | Lifetime of access tokens in minutes |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | `90` | Lifetime of refresh tokens in days |
 | `MASTER_API_KEY` | `""` | Master API Key for system-level automation (validated in production) |
+| `MEDIUM_API_KEY` | `""` | Medium API Key for Control Station integration (requires a user allready created) |
 | `GITHUB_CLIENT_ID` | `""` | GitHub OAuth application Client ID |
 | `GITHUB_CLIENT_SECRET` | `""` | GitHub OAuth application Client Secret |
 | `GITHUB_ORG_NAME` | `Hyperloop-UPV` | Target GitHub organization for membership validation (required in production unless `ALLOW_PUBLIC_GITHUB_LOGIN=true`) |
