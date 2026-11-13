@@ -230,6 +230,7 @@ class GoogleDriveService:
         file_size: int,
         folder_name: str,
         log_id: UUID,
+        client_origin: str | None = None,
     ) -> tuple[str, str | None]:
         """Create a Google Drive resumable upload session for the file.
 
@@ -252,6 +253,8 @@ class GoogleDriveService:
             "X-Upload-Content-Type": "application/zip",
             "X-Upload-Content-Length": str(file_size),
         }
+        if client_origin:
+            headers["Origin"] = client_origin
         metadata: dict[str, Any] = {
             "name": file_name,
             "description": f"Hyperloop telemetry log ID: {log_id}",

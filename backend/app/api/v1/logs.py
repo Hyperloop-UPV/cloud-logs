@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import collections
 import logging
+import urllib.parse
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
@@ -16,6 +17,7 @@ from fastapi import (
     HTTPException,
     Path,
     Query,
+    Request,
     Response,
     status,
 )
@@ -84,11 +86,20 @@ def check_log_modification_permission(log: Log, auth: AuthContext) -> None:
 )
 async def initiate_log_upload(
     payload: LogInitiateRequest,
+    request: Request,
     auth: AuthContext = Depends(require_permission("user")),
     db: AsyncSession = Depends(get_db),
     gdrive: GoogleDriveService = Depends(get_gdrive_service),
 ) -> LogInitiateResponse:
     """Initiate two-phase upload to Google Drive."""
+    client_origin = request.headers.get("origin")
+    if not client_origin:
+        referer = request.headers.get("referer")
+        if referer:
+            parsed = urllib.parse.urlparse(referer)
+            if parsed.scheme and parsed.netloc:
+                client_origin = f"{parsed.scheme}://{parsed.netloc}"
+
     target_folder = get_year_month_folder(payload.file_date)
     log_id = uuid4()
 
@@ -97,6 +108,7 @@ async def initiate_log_upload(
         file_size=payload.file_size,
         folder_name=target_folder,
         log_id=log_id,
+        client_origin=client_origin,
     )
 
     creator_id = auth.user.id if auth.user else None

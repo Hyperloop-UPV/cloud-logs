@@ -72,7 +72,7 @@ jobs:
             GITHUB_CLIENT_SECRET=${{ secrets._GITHUB_CLIENT_SECRET }}
             _GITHUB_CLIENT_ID=${{ secrets._GITHUB_CLIENT_ID }}
             _GITHUB_CLIENT_SECRET=${{ secrets._GITHUB_CLIENT_SECRET }}
-            GITHUB_REDIRECT_URI=https://cloud-logs.hyperloopupv.com/api/v1/auth/github/callback
+            GITHUB_REDIRECT_URI=https://cloud-logs.hyperloopupv.com/auth/callback
             GITHUB_ORG_NAME=Hyperloop-UPV
             EOF
 

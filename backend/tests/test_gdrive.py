@@ -276,6 +276,42 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
             )
             self.assertIn("real_id_999", upload_url)
             self.assertIsNone(drive_file_id)
+            headers = mock_client.post.call_args[1]["headers"]
+            self.assertNotIn("Origin", headers)
+
+    async def test_real_create_resumable_session_with_client_origin(self):
+        """Test that Origin header is included when client_origin is provided."""
+        service = GoogleDriveService(simulation_mode=False)
+        service._access_token = "mock_tok"
+        service._token_expires_at = 9999999999
+        service._folder_cache["2026_10"] = "folder_123"
+
+        mock_client = make_mock_httpx_client()
+        mock_client.post.return_value = httpx.Response(
+            200,
+            headers={
+                "Location": "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=real_id_999"
+            },
+        )
+
+        with (
+            patch.object(GoogleDriveService, "has_credentials", True),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
+            (
+                upload_url,
+                drive_file_id,
+            ) = await service.create_resumable_upload_session(
+                file_name="telemetry_flight.zip",
+                file_size=2048,
+                folder_name="2026_10",
+                log_id=uuid4(),
+                client_origin="https://logs.hyperloopupv.com",
+            )
+            self.assertIn("real_id_999", upload_url)
+            self.assertIsNone(drive_file_id)
+            headers = mock_client.post.call_args[1]["headers"]
+            self.assertEqual(headers.get("Origin"), "https://logs.hyperloopupv.com")
 
     async def test_real_verify_uploaded_file_by_id_and_query(self):
         """Test verifying uploaded file by explicit ID and by folder search."""

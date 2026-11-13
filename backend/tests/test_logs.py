@@ -109,6 +109,66 @@ class TestLogsAPI(TestCase):
         self.assertEqual(added_log.created_by, self.user_id)
         self.assertIsNotNone(added_log.file_date)
 
+    def test_initiate_upload_with_origin_header(self):
+        mock_gdrive = MagicMock(spec=GoogleDriveService)
+        mock_gdrive.create_resumable_upload_session = AsyncMock(
+            return_value=("https://drive.google.com/upload/resumable_session", None)
+        )
+        app.dependency_overrides[get_gdrive_service] = lambda: mock_gdrive
+
+        try:
+            payload = {
+                "fileName": "track_run_origin.zip",
+                "fileSize": 1024,
+            }
+            req_headers = {
+                **self.headers,
+                "Origin": "https://logs.hyperloopupv.com",
+            }
+            response = self.client.post(
+                "/api/v1/logs/initiate",
+                json=payload,
+                headers=req_headers,
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_gdrive.create_resumable_upload_session.assert_called_once()
+            _, kwargs = mock_gdrive.create_resumable_upload_session.call_args
+            self.assertEqual(kwargs.get("client_origin"), "https://logs.hyperloopupv.com")
+        finally:
+            app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
+                simulation_mode=True
+            )
+
+    def test_initiate_upload_with_referer_header_when_origin_missing(self):
+        mock_gdrive = MagicMock(spec=GoogleDriveService)
+        mock_gdrive.create_resumable_upload_session = AsyncMock(
+            return_value=("https://drive.google.com/upload/resumable_session", None)
+        )
+        app.dependency_overrides[get_gdrive_service] = lambda: mock_gdrive
+
+        try:
+            payload = {
+                "fileName": "track_run_referer.zip",
+                "fileSize": 1024,
+            }
+            req_headers = {
+                **self.headers,
+                "Referer": "https://dashboard.hyperloopupv.com/portal/upload?tab=new",
+            }
+            response = self.client.post(
+                "/api/v1/logs/initiate",
+                json=payload,
+                headers=req_headers,
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_gdrive.create_resumable_upload_session.assert_called_once()
+            _, kwargs = mock_gdrive.create_resumable_upload_session.call_args
+            self.assertEqual(kwargs.get("client_origin"), "https://dashboard.hyperloopupv.com")
+        finally:
+            app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
+                simulation_mode=True
+            )
+
     def test_complete_upload_success(self):
         log_id = uuid.uuid4()
         pending_log = self._create_sample_log(log_id=log_id, status="pending_upload")
