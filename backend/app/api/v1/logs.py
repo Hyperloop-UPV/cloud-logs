@@ -21,7 +21,7 @@ from fastapi import (
     Response,
     status,
 )
-from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy import ColumnElement, String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -864,13 +864,14 @@ async def get_log(
 
 @router.get(
     "/{id}/download",
-    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-    summary="Download log file via redirect",
-    description="Redirect authenticated clients to the Google Drive file download/view URL.",
+    status_code=status.HTTP_200_OK,
+    summary="Download log file via stream",
+    description="Stream the log file directly to authenticated clients.",
     responses={
-        307: {"description": "Redirects to external Google Drive URL"},
-        400: {"description": "Log file is not ready or missing Drive URL"},
-        404: {"description": "Log not found or deleted"},
+        200: {"description": "Binary stream of the log file"},
+        400: {"description": "Log file is not ready"},
+        404: {"description": "Log not found or missing Drive file ID"},
+        502: {"description": "Error stream file from Google Drive"},
     },
 )
 async def download_log(
@@ -881,8 +882,9 @@ async def download_log(
     ),
     auth: AuthContext = Depends(get_current_auth),
     db: AsyncSession = Depends(get_db),
-) -> RedirectResponse:
-    """Redirect to Google Drive file download link."""
+    gdrive: GoogleDriveService = Depends(get_gdrive_service),
+) -> StreamingResponse:
+    """Stream log file content from Google Drive"""
     stmt = select(Log).where(Log.id == id, Log.deleted_at.is_(None))
     result = await db.execute(stmt)
     log = result.scalar_one_or_none()
@@ -899,15 +901,23 @@ async def download_log(
             detail=f"Log file is not ready for download. Current status is '{log.status}'",
         )
 
-    if not log.drive_url:
+    if not log.drive_file_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Google Drive URL is not available for this log",
+            detail="Google Drive file ID is not available for this log",
         )
 
-    return RedirectResponse(
-        url=log.drive_url,
-        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    safe_filename = urllib.parse.quote(log.file_name or f"log{log.id}.zip")
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{safe_filename}",
+    }
+    if log.file_size is not None and not gdrive.simulation_mode:
+        headers["Content-Length"] = str(log.file_size)
+
+    return StreamingResponse(
+        gdrive.stream_file_content(log.drive_file_id),
+        media_type="application/zip",
+        headers=headers,
     )
 
 

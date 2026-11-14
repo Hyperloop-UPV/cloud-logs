@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
@@ -187,7 +187,8 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
 
         mock_client = make_mock_httpx_client()
         mock_client.post.return_value = httpx.Response(
-            200, json={"access_token": "ya29.mock_json_token_direct", "expires_in": 3600}
+            200,
+            json={"access_token": "ya29.mock_json_token_direct", "expires_in": 3600},
         )
 
         with patch("httpx.AsyncClient", return_value=mock_client):
@@ -458,3 +459,71 @@ class TestGoogleDriveService(IsolatedAsyncioTestCase):
             )
             # Only 1 create request should have been made thanks to folder lock & cache
             self.assertEqual(mock_client.post.call_count, 1)
+
+    async def test_explicit_simulation_mode_stream_file_content(self):
+        """Simulation mode streams mock bytes without contacting Google Drive."""
+        service = GoogleDriveService(service_account_path="", simulation_mode=True)
+        chunks = [chunk async for chunk in service.stream_file_content("mock_file_123")]
+        self.assertEqual(
+            b"".join(chunks),
+            b"Simulated telemetry log content for mock_file_123\n",
+        )
+
+    async def test_real_stream_file_content_success_and_errors(self):
+        """Test streaming chunks from Google Drive and handling HTTP/status errors."""
+        service = GoogleDriveService(simulation_mode=False)
+        service._access_token = "mock_tok"
+        service._token_expires_at = 9999999999
+
+        # Helper for async context manager returned by client.stream()
+        def make_stream_ctx(
+            status_code: int, chunks: list[bytes], error_body: bytes = b""
+        ):
+            mock_resp = AsyncMock()
+            mock_resp.status_code = status_code
+            mock_resp.aread = AsyncMock(return_value=error_body)
+
+            async def mock_aiter_bytes(chunk_size: int = 65536):
+                for c in chunks:
+                    yield c
+
+            mock_resp.aiter_bytes = mock_aiter_bytes
+
+            stream_cm = AsyncMock()
+            stream_cm.__aenter__.return_value = mock_resp
+            stream_cm.__aexit__.return_value = None
+            return stream_cm
+
+        mock_client = make_mock_httpx_client()
+
+        with (
+            patch.object(GoogleDriveService, "has_credentials", True),
+            patch("httpx.AsyncClient", return_value=mock_client),
+        ):
+            # 1. Successful chunked download
+            mock_client.stream = MagicMock(
+                return_value=make_stream_ctx(200, [b"chunk_1_", b"chunk_2"])
+            )
+            received = [
+                c
+                async for c in service.stream_file_content("real_file_id", chunk_size=8)
+            ]
+            self.assertEqual(received, [b"chunk_1_", b"chunk_2"])
+
+            # 2. Non-200 response from Google Drive raises 502
+            mock_client.stream = MagicMock(
+                return_value=make_stream_ctx(404, [], error_body=b"File not found")
+            )
+            with self.assertRaises(HTTPException) as cm_404:
+                async for _ in service.stream_file_content("missing_file_id"):
+                    pass
+            self.assertEqual(cm_404.exception.status_code, 502)
+
+            # 3. Network/httpx error raises 502
+            failing_cm = AsyncMock()
+            failing_cm.__aenter__.side_effect = httpx.ConnectError("Connection reset")
+            mock_client.stream = MagicMock(return_value=failing_cm)
+            with self.assertRaises(HTTPException) as cm_net:
+                async for _ in service.stream_file_content("real_file_id"):
+                    pass
+            self.assertEqual(cm_net.exception.status_code, 502)

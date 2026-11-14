@@ -307,8 +307,8 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(repeat_abort.status_code, 200)
         self.assertEqual(repeat_abort.json()["status"], "aborted")
 
-    def test_download_redirect_and_permissions(self):
-        """Test download redirect to Google Drive URL and checks."""
+    def test_download_stream_and_permissions(self):
+        """Test binary stream download from Google Drive and permission checks."""
         # Create and complete a log
         init_res = self.client.post(
             "/api/v1/logs/initiate",
@@ -321,25 +321,26 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         down_pending = self.client.get(
             f"/api/v1/logs/{log_id}/download",
             headers=self.viewer_headers,
-            follow_redirects=False,
         )
         self.assertEqual(down_pending.status_code, 400)
         self.assertIn("not ready for download", down_pending.json()["detail"])
 
         # Complete the upload
-        comp_res = self.client.post(
+        self.client.post(
             f"/api/v1/logs/{log_id}/complete", json={}, headers=self.eng_headers
         )
-        drive_url = comp_res.json()["driveUrl"]
 
-        # Viewer can download: receives 307 redirect
+        # Viewer can download: receives 200 streaming response
         down_ready = self.client.get(
             f"/api/v1/logs/{log_id}/download",
             headers=self.viewer_headers,
-            follow_redirects=False,
         )
-        self.assertEqual(down_ready.status_code, 307)
-        self.assertEqual(down_ready.headers["location"], drive_url)
+        self.assertEqual(down_ready.status_code, 200)
+        self.assertIn("downloadable.zip", down_ready.headers["content-disposition"])
+        self.assertEqual(
+            down_ready.content,
+            f"Simulated telemetry log content for gdrive_{log_id}\n".encode(),
+        )
 
         # Unauthenticated receives 401
         self.assertEqual(
