@@ -324,17 +324,26 @@ export function LogDetailSheet({
               <section>
                 <dl>
                   <Row label="Window">
-                    {log.startDate || log.endDate ? (
-                      <>
-                        {formatDateTime(log.startDate)} →{" "}
-                        {formatDateTime(log.endDate)}
-                      </>
+                    {log.startDate ? (
+                      log.duration != null ? (
+                        <>
+                          {formatDateTime(log.startDate)} →{" "}
+                          {formatDateTime(
+                            new Date(
+                              new Date(log.startDate).getTime() +
+                                log.duration * 1000,
+                            ).toISOString(),
+                          )}
+                        </>
+                      ) : (
+                        formatDateTime(log.startDate)
+                      )
                     ) : (
                       EMPTY
                     )}
                   </Row>
                   <Row label="Duration">
-                    {formatDuration(log.startDate, log.endDate)}
+                    {formatDuration(log.duration)}
                   </Row>
                   <Row label="Captured">{formatDateTime(log.fileDate)}</Row>
                   <Row label="Size">{formatBytes(log.fileSize)}</Row>

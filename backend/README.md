@@ -24,7 +24,7 @@ Centralized telemetry and diagnostic log metadata catalog service.
   - **Roles**: All registered team members default to `user` (common user access to upload, search, download, and manage logs). Members can be explicitly promoted to `admin` (or demoted) via `PATCH /api/v1/users/{id}/role` by existing admins or using the Master API Key.
 - **Search, Sorting, Autocomplete & Statistics**:
   - Full catalog filtering by tags, author, date ranges (`startDate`, `endDate`), and full-text notes/filenames (`textQuery`).
-  - Multi-field sorting (`sortBy`: `createdAt`, `startDate`, `endDate`, `fileName`, `fileSize`) and direction (`sortOrder`: `asc`, `desc`).
+  - Multi-field sorting (`sortBy`: `createdAt`, `fileDate`, `startDate`, `duration`, `fileName`, `fileSize`) and direction (`sortOrder`: `asc`, `desc`).
   - Restricted internal client metadata search (`metadataQuery`, admin-only).
   - Autocomplete endpoint (`GET /api/v1/logs/tags`) for frontend UI tagging.
   - Aggregated metrics endpoint (`GET /api/v1/logs/stats`) reporting totals, storage size, status breakdown, and top tags.

@@ -1021,13 +1021,12 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             subsequent_res.json()["detail"], "Refresh token has been revoked"
         )
 
-    async def test_log_duration_computation(self):
-        """Verify duration computed field on Log model and LogOut schema."""
+    async def test_log_duration_field(self):
+        """Verify duration integer column on Log model and LogOut schema."""
         start = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
-        end = datetime(2026, 10, 23, 10, 15, 30, 456000, tzinfo=UTC)
 
         l1 = await self.seed_log(
-            file_name="run_duration.zip", file_size=1024, start_date=start, end_date=end
+            file_name="run_duration.zip", file_size=1024, start_date=start, duration=930
         )
         l2 = await self.seed_log(file_name="run_no_duration.zip", file_size=512)
 
@@ -1036,9 +1035,9 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(res1.status_code, 200)
         data1 = res1.json()
         self.assertNotIn("durationSeconds", data1)
-        self.assertEqual(data1["duration"], 930.456)
+        self.assertEqual(data1["duration"], 930)
 
-        # Test GET /api/v1/logs/{id} for log without dates
+        # Test GET /api/v1/logs/{id} for log without duration
         res2 = self.client.get(f"/api/v1/logs/{l2.id}", headers=self.eng_headers)
         self.assertEqual(res2.status_code, 200)
         data2 = res2.json()
@@ -1053,41 +1052,57 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         items = res_search.json()["items"]
         self.assertEqual(len(items), 1)
         self.assertNotIn("durationSeconds", items[0])
-        self.assertEqual(items[0]["duration"], 930.456)
+        self.assertEqual(items[0]["duration"], 930)
 
-    async def test_overlapping_date_filtering(self):
-        """Verify overlapping interval date filters in search_logs instead of strict enclosure."""
-        # Log A: 10:00 to 11:00
-        # Log B: 10:30 to 12:00
-        # Log C: 12:00 to 13:00
-        # Log D: file_date 10:45 (start_date and end_date None)
+    async def test_date_filtering(self):
+        """Verify date filters in search_logs using start_date with file_date fallback."""
         t1000 = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
-        t1030 = datetime(2026, 10, 23, 10, 30, 0, tzinfo=UTC)
         t1045 = datetime(2026, 10, 23, 10, 45, 0, tzinfo=UTC)
         t1100 = datetime(2026, 10, 23, 11, 0, 0, tzinfo=UTC)
         t1200 = datetime(2026, 10, 23, 12, 0, 0, tzinfo=UTC)
-        t1300 = datetime(2026, 10, 23, 13, 0, 0, tzinfo=UTC)
 
-        await self.seed_log(file_name="overlap_A.zip", start_date=t1000, end_date=t1100)
-        await self.seed_log(file_name="overlap_B.zip", start_date=t1030, end_date=t1200)
-        await self.seed_log(file_name="overlap_C.zip", start_date=t1200, end_date=t1300)
-        await self.seed_log(file_name="overlap_D.zip", file_date=t1045)
+        await self.seed_log(file_name="filter_A.zip", start_date=t1000)
+        await self.seed_log(file_name="filter_B.zip", start_date=t1100)
+        await self.seed_log(file_name="filter_C.zip", start_date=t1200)
+        await self.seed_log(file_name="filter_D.zip", file_date=t1045)
 
         # Query interval: [10:45, 11:15]
-        # lA (10:00-11:00) overlaps! (end_date 11:00 >= 10:45, start_date 10:00 <= 11:15)
-        # lB (10:30-12:00) overlaps! (end_date 12:00 >= 10:45, start_date 10:30 <= 11:15)
-        # lC (12:00-13:00) DOES NOT overlap (start_date 12:00 > 11:15)
-        # lD (file_date 10:45) overlaps via coalesce fallback (file_date >= 10:45 and <= 11:15)
+        # fB (11:00) is within [10:45, 11:15]
+        # fD (file_date 10:45) is within [10:45, 11:15] via coalesce fallback
+        # fA (10:00) is < 10:45
+        # fC (12:00) is > 11:15
         res = self.client.get(
-            "/api/v1/logs?startDate=2026-10-23T10:45:00Z&endDate=2026-10-23T11:15:00Z&textQuery=overlap_",
+            "/api/v1/logs?startDate=2026-10-23T10:45:00Z&endDate=2026-10-23T11:15:00Z&textQuery=filter_",
             headers=self.eng_headers,
         )
         self.assertEqual(res.status_code, 200)
         file_names = {item["fileName"] for item in res.json()["items"]}
-        self.assertIn("overlap_A.zip", file_names)
-        self.assertIn("overlap_B.zip", file_names)
-        self.assertIn("overlap_D.zip", file_names)
-        self.assertNotIn("overlap_C.zip", file_names)
+        self.assertIn("filter_B.zip", file_names)
+        self.assertIn("filter_D.zip", file_names)
+        self.assertNotIn("filter_A.zip", file_names)
+        self.assertNotIn("filter_C.zip", file_names)
+
+    async def test_sort_by_duration(self):
+        """Verify sorting logs by duration column."""
+        await self.seed_log(file_name="dur_1.zip", duration=60)
+        await self.seed_log(file_name="dur_2.zip", duration=3600)
+        await self.seed_log(file_name="dur_3.zip", duration=300)
+
+        res_asc = self.client.get(
+            "/api/v1/logs?sortBy=duration&sortOrder=asc&textQuery=dur_",
+            headers=self.eng_headers,
+        )
+        self.assertEqual(res_asc.status_code, 200)
+        items_asc = res_asc.json()["items"]
+        self.assertEqual([x["fileName"] for x in items_asc], ["dur_1.zip", "dur_3.zip", "dur_2.zip"])
+
+        res_desc = self.client.get(
+            "/api/v1/logs?sortBy=duration&sortOrder=desc&textQuery=dur_",
+            headers=self.eng_headers,
+        )
+        self.assertEqual(res_desc.status_code, 200)
+        items_desc = res_desc.json()["items"]
+        self.assertEqual([x["fileName"] for x in items_desc], ["dur_2.zip", "dur_3.zip", "dur_1.zip"])
 
     async def test_rich_stats_and_tag_metrics(self):
         """Verify needs_attention, recent_uploads, uploads_per_month, tag_details, and /tags/stats."""

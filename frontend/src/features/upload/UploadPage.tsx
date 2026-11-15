@@ -41,7 +41,7 @@ export function UploadPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [duration, setDuration] = useState("");
   const [rejected, setRejected] = useState<string[]>([]);
 
   const tagSuggestions = useQuery({ queryKey: ["logTags"], queryFn: listTags });
@@ -57,14 +57,19 @@ export function UploadPage() {
     );
     if (zips.length === 0) return;
 
+    const parsedDuration =
+      duration.trim() !== "" && !Number.isNaN(Number(duration))
+        ? Math.max(0, parseInt(duration, 10))
+        : null;
+
     queue.enqueue(
       zips,
       {
         tags,
         note: note || null,
         startDate: toIso(start),
-        endDate: toIso(end),
-        fileDate: toIso(start) ?? toIso(end) ?? null,
+        duration: parsedDuration,
+        fileDate: toIso(start) ?? null,
         fileHash: null,
         clientMetadata: {},
       },
@@ -186,11 +191,14 @@ export function UploadPage() {
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label className="text-[11px]">Ends</Label>
+                  <Label className="text-[11px]">Duration (seconds)</Label>
                   <Input
-                    type="datetime-local"
-                    value={end}
-                    onChange={(event) => setEnd(event.target.value)}
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder="e.g. 120"
+                    value={duration}
+                    onChange={(event) => setDuration(event.target.value)}
                     className="h-8 text-xs shadow-none"
                   />
                 </div>

@@ -753,18 +753,28 @@ class TestLogsAPI(TestCase):
         )
         self.assertEqual(delete_res.status_code, 204)
 
-    def test_log_out_duration_computation(self):
-        """LogOut computed field duration."""
+    def test_log_out_duration_field(self):
+        """LogOut returns duration integer field."""
         sample_log = self._create_sample_log()
-        sample_log.start_date = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
-        sample_log.end_date = datetime(2026, 10, 23, 10, 5, 30, tzinfo=UTC)
+        sample_log.duration = 330
 
         self.mock_result.scalar_one_or_none.return_value = sample_log
         res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
         self.assertEqual(res.status_code, 200)
         data = res.json()
-        self.assertEqual(data["duration"], 330.0)
+        self.assertEqual(data["duration"], 330)
         self.assertNotIn("durationSeconds", data)
+
+    def test_log_out_duration_none(self):
+        """LogOut returns duration as None when unset."""
+        sample_log = self._create_sample_log()
+        sample_log.duration = None
+
+        self.mock_result.scalar_one_or_none.return_value = sample_log
+        res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIsNone(data["duration"])
 
     def test_get_tags_stats_endpoint(self):
         """GET /api/v1/logs/tags/stats returns rich tag breakdown."""
@@ -803,19 +813,35 @@ class TestLogsAPI(TestCase):
         )
         self.assertEqual(res.status_code, 200)
 
-    def test_duration_with_mixed_naive_aware_timezones(self):
-        """Verify duration calculation does not raise TypeError when mixing naive and aware datetimes."""
-        sample_log = self._create_sample_log(status="ready")
-        # start_date is naive, end_date is aware
-        sample_log.start_date = datetime(2026, 10, 23, 10, 0, 0)
-        sample_log.end_date = datetime(2026, 10, 23, 10, 2, 0, tzinfo=UTC)
+    def test_initiate_upload_with_duration(self):
+        """Verify optional duration parameter in initiate upload."""
+        payload = {
+            "fileName": "track_run_duration.zip",
+            "fileSize": 1048576,
+            "duration": 120,
+        }
+        response = self.client.post(
+            "/api/v1/logs/initiate",
+            json=payload,
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        added_log = self.mock_db.add.call_args[0][0]
+        self.assertEqual(added_log.duration, 120)
 
-        self.mock_result.scalar_one_or_none.return_value = sample_log
-        res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data["duration"], 120.0)
-        self.assertEqual(sample_log.duration, 120.0)
+    def test_initiate_upload_with_negative_duration(self):
+        """Verify negative duration is rejected with 422."""
+        payload = {
+            "fileName": "track_run_negative.zip",
+            "fileSize": 1048576,
+            "duration": -10,
+        }
+        response = self.client.post(
+            "/api/v1/logs/initiate",
+            json=payload,
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 422)
 
     def test_search_logs_empty_results(self):
         """Search query returning 0 results returns empty list and total 0."""

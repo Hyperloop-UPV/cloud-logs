@@ -83,15 +83,17 @@ export function formatRange(
     : `${dateTime.format(from)} → ${dateTime.format(to)}`;
 }
 
-/** Duracion del run a partir de su ventana, en la forma compacta 1h 23m. */
-export function formatDuration(
-  start: string | null | undefined,
-  end: string | null | undefined,
-): string {
-  if (!start || !end) return EMPTY;
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  if (Number.isNaN(ms) || ms < 0) return EMPTY;
-  const totalMinutes = Math.round(ms / 60000);
+/** Duracion del run en segundos, en la forma compacta 1h 23m. */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (
+    seconds === null ||
+    seconds === undefined ||
+    Number.isNaN(seconds) ||
+    seconds < 0
+  ) {
+    return EMPTY;
+  }
+  const totalMinutes = Math.round(seconds / 60);
   if (totalMinutes < 1) return "<1m";
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;

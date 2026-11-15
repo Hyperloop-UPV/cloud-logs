@@ -42,50 +42,27 @@ describe("formatBytes", () => {
 
 describe("formatDuration", () => {
   it("returns <1m for durations under one minute", () => {
-    const start = "2026-03-12T10:00:00Z";
-    const end = "2026-03-12T10:00:20Z";
-    expect(formatDuration(start, end)).toBe("<1m");
+    expect(formatDuration(20)).toBe("<1m");
   });
 
   it("formats minute durations", () => {
-    const start = "2026-03-12T10:00:00Z";
-    const end = "2026-03-12T10:45:00Z";
-    expect(formatDuration(start, end)).toBe("45m");
+    expect(formatDuration(45 * 60)).toBe("45m");
   });
 
   it("formats hours and minutes", () => {
-    const start = "2026-03-12T10:00:00Z";
-    const end = "2026-03-12T12:35:00Z";
-    expect(formatDuration(start, end)).toBe("2h 35m");
+    expect(formatDuration(2 * 3600 + 35 * 60)).toBe("2h 35m");
   });
 
   it("formats durations exceeding 24 hours", () => {
-    const start = "2026-03-12T10:00:00Z";
-    const end = "2026-03-13T12:00:00Z";
-    expect(formatDuration(start, end)).toBe("26h 0m");
+    expect(formatDuration(26 * 3600)).toBe("26h 0m");
   });
 
-  it.each([
-    [null, "2026-03-12T10:00:00Z"],
-    ["2026-03-12T10:00:00Z", null],
-    [undefined, undefined],
-    ["", ""],
-  ])("returns EMPTY when start or end is missing: %s, %s", (start, end) => {
-    expect(formatDuration(start, end)).toBe(EMPTY);
-  });
-
-  it("returns EMPTY for negative durations (end before start)", () => {
-    expect(formatDuration("2026-03-12T12:00:00Z", "2026-03-12T10:00:00Z")).toBe(
-      EMPTY,
-    );
-  });
-
-  it.each([
-    ["not-a-date", "2026-03-12T10:00:00Z"],
-    ["2026-03-12T10:00:00Z", "invalid"],
-  ])("returns EMPTY for invalid date strings: %s, %s", (start, end) => {
-    expect(formatDuration(start, end)).toBe(EMPTY);
-  });
+  it.each([null, undefined, Number.NaN, -1, -60])(
+    "returns EMPTY for missing or invalid duration: %s",
+    (value) => {
+      expect(formatDuration(value)).toBe(EMPTY);
+    },
+  );
 });
 
 describe("formatDate", () => {

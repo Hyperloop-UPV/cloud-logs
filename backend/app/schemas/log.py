@@ -1,10 +1,10 @@
 """Schemas for telemetry and diagnostic logs supporting Google Drive two-phase uploads."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import Field, computed_field, field_validator
+from pydantic import Field, field_validator
 
 from app.schemas.base import CamelModel
 
@@ -25,8 +25,8 @@ class LogInitiateRequest(CamelModel):
     start_date: datetime | None = Field(
         default=None, description="Start timestamp of telemetry data"
     )
-    end_date: datetime | None = Field(
-        default=None, description="End timestamp of telemetry data"
+    duration: int | None = Field(
+        default=None, ge=0, description="Optional duration in seconds"
     )
     file_hash: str | None = Field(
         default=None, description="Expected SHA-256 hash if pre-calculated"
@@ -131,7 +131,7 @@ class LogOut(CamelModel):
     client_metadata: dict[str, Any] = Field(default_factory=dict)
     file_date: datetime | None = None
     start_date: datetime | None = None
-    end_date: datetime | None = None
+    duration: int | None = None
     created_by: UUID | None = None
     creator: str = "unknown"
     created_at: datetime
@@ -146,25 +146,6 @@ class LogOut(CamelModel):
     @classmethod
     def ensure_metadata(cls, v: Any) -> dict[str, Any]:
         return v if isinstance(v, dict) else {}
-
-    @computed_field
-    @property
-    def duration(self) -> float | None:
-        """Recording duration in seconds computed from start_date and end_date."""
-        if self.start_date and self.end_date:
-            start = (
-                self.start_date
-                if self.start_date.tzinfo is not None
-                else self.start_date.replace(tzinfo=UTC)
-            )
-            end = (
-                self.end_date
-                if self.end_date.tzinfo is not None
-                else self.end_date.replace(tzinfo=UTC)
-            )
-            diff = (end - start).total_seconds()
-            return max(0.0, round(diff, 3))
-        return None
 
 
 class LogSearchResponse(CamelModel):

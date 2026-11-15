@@ -37,12 +37,11 @@ export interface Log {
   clientMetadata: Record<string, unknown>;
   fileDate: string | null;
   startDate: string | null;
-  endDate: string | null;
   createdBy: string | null;
   creator: string;
   createdAt: string;
   completedAt: string | null;
-  /** Duración en segundos calculada automáticamente por el backend. */
+  /** Duración en segundos (opcional). */
   duration?: number | null;
 }
 
@@ -54,7 +53,12 @@ export interface LogPage {
 }
 
 export type SortBy =
-  "createdAt" | "fileDate" | "startDate" | "endDate" | "fileName" | "fileSize";
+  | "createdAt"
+  | "fileDate"
+  | "startDate"
+  | "duration"
+  | "fileName"
+  | "fileSize";
 export type SortOrder = "asc" | "desc";
 
 /** Filtros de GET /logs. startDate/endDate filtran logs cuyo intervalo solapa la ventana. */
@@ -79,7 +83,7 @@ export interface LogInitiateRequest {
   fileSize: number;
   fileDate?: string | null;
   startDate?: string | null;
-  endDate?: string | null;
+  duration?: number | null;
   fileHash?: string | null;
   tags?: string[];
   note?: string | null;

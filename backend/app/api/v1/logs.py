@@ -168,7 +168,7 @@ async def initiate_log_upload(
         note=payload.note,
         file_date=payload.file_date,
         start_date=payload.start_date,
-        end_date=payload.end_date,
+        duration=payload.duration,
         client_metadata=payload.client_metadata,
         created_by=creator_id,
         created_at=datetime.now(UTC),
@@ -380,7 +380,7 @@ async def search_logs(
     sort_by: str = Query(
         default="createdAt",
         alias="sortBy",
-        description="Sort by: 'createdAt', 'startDate', 'endDate', 'fileName', 'fileSize'",
+        description="Sort by: 'createdAt', 'startDate', 'duration', 'fileName', 'fileSize'",
     ),
     sort_order: str = Query(
         default="desc", alias="sortOrder", description="Sort direction: 'asc' or 'desc'"
@@ -417,14 +417,10 @@ async def search_logs(
             conditions.append(cast(Log.tags, String).like(f'%"{t}"%'))
 
     if start_date:
-        conditions.append(
-            func.coalesce(Log.end_date, Log.start_date, Log.file_date) >= start_date
-        )
+        conditions.append(func.coalesce(Log.start_date, Log.file_date) >= start_date)
 
     if end_date:
-        conditions.append(
-            func.coalesce(Log.start_date, Log.end_date, Log.file_date) <= end_date
-        )
+        conditions.append(func.coalesce(Log.start_date, Log.file_date) <= end_date)
 
     if creator:
         conditions.append(User.username.ilike(f"%{creator}%"))
@@ -442,8 +438,7 @@ async def search_logs(
         "file_date": Log.file_date,
         "startdate": Log.start_date,
         "start_date": Log.start_date,
-        "enddate": Log.end_date,
-        "end_date": Log.end_date,
+        "duration": Log.duration,
         "filename": Log.file_name,
         "file_name": Log.file_name,
         "filesize": Log.file_size,
@@ -453,7 +448,7 @@ async def search_logs(
     if sort_key not in sort_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sortBy field '{sort_by}'. Allowed fields: createdAt, fileDate, startDate, endDate, fileName, fileSize",
+            detail=f"Invalid sortBy field '{sort_by}'. Allowed fields: createdAt, fileDate, startDate, duration, fileName, fileSize",
         )
     sort_column = sort_fields[sort_key]
 

@@ -88,7 +88,12 @@ export function LogTable({
             <SortableHeader label="Window" col="startDate" {...sortProps} />
           )}
           {isVisible("duration") && (
-            <PlainHeader label="Duration" align="right" />
+            <SortableHeader
+              label="Duration"
+              col="duration"
+              align="right"
+              {...sortProps}
+            />
           )}
           {isVisible("size") && (
             <SortableHeader
@@ -193,13 +198,23 @@ export function LogTable({
                     "text-muted-foreground whitespace-nowrap tabular-nums",
                   )}
                 >
-                  {formatRange(log.startDate, log.endDate)}
+                  {log.startDate
+                    ? log.duration != null
+                      ? formatRange(
+                          log.startDate,
+                          new Date(
+                            new Date(log.startDate).getTime() +
+                              log.duration * 1000,
+                          ).toISOString(),
+                        )
+                      : formatDateTime(log.startDate)
+                    : EMPTY}
                 </td>
               )}
 
               {isVisible("duration") && (
                 <td className={cn(pad, "text-right font-mono tabular-nums")}>
-                  {formatDuration(log.startDate, log.endDate)}
+                  {formatDuration(log.duration)}
                 </td>
               )}
 
