@@ -342,9 +342,7 @@ export function LogDetailSheet({
                       EMPTY
                     )}
                   </Row>
-                  <Row label="Duration">
-                    {formatDuration(log.duration)}
-                  </Row>
+                  <Row label="Duration">{formatDuration(log.duration)}</Row>
                   <Row label="Captured">{formatDateTime(log.fileDate)}</Row>
                   <Row label="Size">{formatBytes(log.fileSize)}</Row>
                   <Row label="Registered">{formatDateTime(log.createdAt)}</Row>
