@@ -25,7 +25,6 @@ import {
   EMPTY,
   formatBytes,
   formatDateTime,
-  formatRange,
   formatRelative,
 } from "../../lib/format";
 import { statusStyle } from "./statusStyles";
