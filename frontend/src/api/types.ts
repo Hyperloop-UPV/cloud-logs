@@ -51,11 +51,7 @@ export interface LogPage {
 }
 
 export type SortBy =
-  | "createdAt"
-  | "fileDate"
-  | "startDate"
-  | "fileName"
-  | "fileSize";
+  "createdAt" | "fileDate" | "startDate" | "fileName" | "fileSize";
 export type SortOrder = "asc" | "desc";
 
 /** Filtros de GET /logs. startDate/endDate filtran logs cuyo intervalo solapa la ventana. */

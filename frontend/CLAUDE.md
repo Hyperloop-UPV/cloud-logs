@@ -12,16 +12,16 @@ SPA de React 19 + Vite + TS que consume el API de `cloud-logs`. Se construye sob
 Ocho pantallas, todas vivas (`src/constants/pages.ts`, salvo About, que vive en el
 pie del raíl, y la de acceso, que no se navega):
 
-| Ruta | Qué es |
-| --- | --- |
-| `/` | Dashboard: métricas, volumen mensual con uPlot, reparto por estado, tags y actividad reciente. Todo enlaza al catálogo con el filtro puesto |
+| Ruta       | Qué es                                                                                                                                                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`        | Dashboard: métricas, volumen mensual con uPlot, reparto por estado, tags y actividad reciente. Todo enlaza al catálogo con el filtro puesto                                                                      |
 | `/catalog` | Tabla con filtros, orden y paginación. Pinchar una fila abre la ficha (`?log=<uuid>`), editable. Selección múltiple con etiquetado en lote, búsquedas guardadas, columnas y densidad configurables, export a CSV |
-| `/tags` | Las etiquetas en dos modos (`?view=cards\|table`): tarjetas de colección y tabla ordenable. `?view=graph` redirige a `/graph` |
-| `/graph` | El grafo del archivo: un nodo por log y uno por etiqueta, con pantalla completa |
-| `/upload` | Subida en dos fases directa a Drive, con cola, progreso y cancelación |
-| `/team` | Usuarios y roles, más el `cleanup` con previsualización. Solo admin |
-| `/about` | Quién la ha hecho, la pila, el repositorio y el estado del servicio |
-| `/signin` | OAuth de GitHub y clave maestra, con las trazas de fondo y el estado del API |
+| `/tags`    | Las etiquetas en dos modos (`?view=cards\|table`): tarjetas de colección y tabla ordenable. `?view=graph` redirige a `/graph`                                                                                    |
+| `/graph`   | El grafo del archivo: un nodo por log y uno por etiqueta, con pantalla completa                                                                                                                                  |
+| `/upload`  | Subida en dos fases directa a Drive, con cola, progreso y cancelación                                                                                                                                            |
+| `/team`    | Usuarios y roles, más el `cleanup` con previsualización. Solo admin                                                                                                                                              |
+| `/about`   | Quién la ha hecho, la pila, el repositorio y el estado del servicio                                                                                                                                              |
+| `/signin`  | OAuth de GitHub y clave maestra, con las trazas de fondo y el estado del API                                                                                                                                     |
 
 El `README.md` de al lado es la puerta de entrada para personas: puesta en marcha,
 comandos, estructura y despliegue. Este fichero es el complemento: las trampas y el
@@ -95,7 +95,7 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   reimplementarlo. Hubo un `tagGraphLayout.ts` hecho a mano; se retiró. Tres cosas
   que hay que respetar en `features/graph/GraphCanvas.tsx`:
   - **`graphData` tiene que ser referencialmente estable.** La librería guarda la
-    posición y la velocidad *dentro* de los objetos de nodo; si recibe un objeto
+    posición y la velocidad _dentro_ de los objetos de nodo; si recibe un objeto
     nuevo en cada render, reinicia la simulación y el grafo tiembla. Va en un
     `useMemo` que depende solo de los datos.
   - **El canvas no hereda CSS** (la misma trampa que uPlot). Los colores salen de
@@ -139,7 +139,7 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
     las aristas se iluminaban (usan `endId()`) y los nodos no.
   - **Al señalar un nodo, sus vecinos a una arista se tiñen del acento, más
     claro** (`lighten()`, mezclando hacia blanco y no hacia el fondo: hacia el
-    fondo saldría más claro en el tema claro pero más *oscuro* en el oscuro).
+    fondo saldría más claro en el tema claro pero más _oscuro_ en el oscuro).
     Solo los logs: una etiqueta ya va de ese color y aclararla la haría parecer
     apagada justo al señalarla. El relleno naranja tapa el color de estado, que
     es información, así que **el estado pasa al borde** en vez de perderse.
@@ -244,7 +244,7 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   segmento mide lo que mide su texto. Úsalo como referencia antes de meter texto
   variable en el control del kit.
 - **El `Combobox` del kit no sirve para los tags.** Su modelo es de selección pura y
-  aquí hace falta además *crear* un tag que todavía no existe. Para las dos cosas
+  aquí hace falta además _crear_ un tag que todavía no existe. Para las dos cosas
   está `features/catalog/TagEditor.tsx`, con `allowCreate` para distinguirlas.
 
 ## Convenciones
@@ -253,7 +253,7 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   Software H12** (H12 es la generación del pod); el pie de la pantalla de acceso
   firma así. No es un «department» ni un «area»: no lo llames de otra forma. Y
   **software no es un subsistema**: `subsystem`, la clave que aparece dentro de
-  `clientMetadata`, designa partes *del pod* (propulsion, levitation, BMS, LCU,
+  `clientMetadata`, designa partes _del pod_ (propulsion, levitation, BMS, LCU,
   PCU…), no unidades del equipo. El icono de `SoftwareMark` no es específico de una
   generación, así que su `alt` se queda en «Hyperloop UPV Software», sin el H12.
 - **Textos de interfaz en inglés**, sentence case. Las mayúsculas se aplican con
@@ -289,9 +289,9 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
   principal porque es la pantalla de trabajo diario; el dashboard (que arrastra
   uPlot), la subida y el equipo se cargan al visitarlos.
 - **Qué va en la URL y qué en `localStorage`.** En la query string va lo que
-  describe *qué datos* se miran (filtros, orden, página, log abierto), porque eso es
+  describe _qué datos_ se miran (filtros, orden, página, log abierto), porque eso es
   lo que tiene sentido compartir por enlace. En `localStorage` va lo que describe
-  *cómo* los quiere ver una persona en su pantalla: columnas y densidad
+  _cómo_ los quiere ver una persona en su pantalla: columnas y densidad
   (`useTablePrefs.ts`) y las búsquedas guardadas (`useSavedViews.ts`). Mandarle a un
   compañero tu configuración de columnas pegada a la búsqueda sería imponérsela.
   Las dos lecturas y las dos escrituras van en `try/catch`: en una pestaña privada
@@ -310,13 +310,13 @@ Para apuntar a otro backend: `VITE_API_TARGET=http://127.0.0.1:8001 npm run dev`
 
 ## Divergencias conscientes de los demás frontends del equipo
 
-| Divergencia | Motivo |
-| --- | --- |
-| Paginación explícita | Decisión de producto; el API pagina por offset y así la posición cabe en la URL. El resto de las vistas usan scroll continuo con contador `n / total` |
-| `@tanstack/react-query` | La capa `src/api/` ya existía; esta app es REST paginada, no telemetría por WebSocket. Las demás vistas usan `fetch` + Zustand |
-| `BrowserRouter` | No se sirve desde Electron, así que no hace falta `HashRouter` |
-| `npm` | El repo `cloud-logs` ya tiene `package-lock.json`; el monorepo del equipo usa pnpm |
-| Tema inicial según el sistema | `logging-view` y `competition-view` arrancan en oscuro; aquí se sigue a `prefers-color-scheme`, como `adj-view` |
+| Divergencia                   | Motivo                                                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paginación explícita          | Decisión de producto; el API pagina por offset y así la posición cabe en la URL. El resto de las vistas usan scroll continuo con contador `n / total` |
+| `@tanstack/react-query`       | La capa `src/api/` ya existía; esta app es REST paginada, no telemetría por WebSocket. Las demás vistas usan `fetch` + Zustand                        |
+| `BrowserRouter`               | No se sirve desde Electron, así que no hace falta `HashRouter`                                                                                        |
+| `npm`                         | El repo `cloud-logs` ya tiene `package-lock.json`; el monorepo del equipo usa pnpm                                                                    |
+| Tema inicial según el sistema | `logging-view` y `competition-view` arrancan en oscuro; aquí se sigue a `prefers-color-scheme`, como `adj-view`                                       |
 
 ## Las dos formas de entrar
 
