@@ -1021,39 +1021,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             subsequent_res.json()["detail"], "Refresh token has been revoked"
         )
 
-    async def test_log_duration_field(self):
-        """Verify duration integer column on Log model and LogOut schema."""
-        start = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
-
-        l1 = await self.seed_log(
-            file_name="run_duration.zip", file_size=1024, start_date=start, duration=930
-        )
-        l2 = await self.seed_log(file_name="run_no_duration.zip", file_size=512)
-
-        # Test GET /api/v1/logs/{id} for log with duration
-        res1 = self.client.get(f"/api/v1/logs/{l1.id}", headers=self.eng_headers)
-        self.assertEqual(res1.status_code, 200)
-        data1 = res1.json()
-        self.assertNotIn("durationSeconds", data1)
-        self.assertEqual(data1["duration"], 930)
-
-        # Test GET /api/v1/logs/{id} for log without duration
-        res2 = self.client.get(f"/api/v1/logs/{l2.id}", headers=self.eng_headers)
-        self.assertEqual(res2.status_code, 200)
-        data2 = res2.json()
-        self.assertNotIn("durationSeconds", data2)
-        self.assertIsNone(data2["duration"])
-
-        # Test search endpoint also includes duration
-        res_search = self.client.get(
-            "/api/v1/logs?textQuery=run_duration", headers=self.eng_headers
-        )
-        self.assertEqual(res_search.status_code, 200)
-        items = res_search.json()["items"]
-        self.assertEqual(len(items), 1)
-        self.assertNotIn("durationSeconds", items[0])
-        self.assertEqual(items[0]["duration"], 930)
-
     async def test_date_filtering(self):
         """Verify date filters in search_logs using start_date with file_date fallback."""
         t1000 = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
@@ -1081,28 +1048,6 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertIn("filter_D.zip", file_names)
         self.assertNotIn("filter_A.zip", file_names)
         self.assertNotIn("filter_C.zip", file_names)
-
-    async def test_sort_by_duration(self):
-        """Verify sorting logs by duration column."""
-        await self.seed_log(file_name="dur_1.zip", duration=60)
-        await self.seed_log(file_name="dur_2.zip", duration=3600)
-        await self.seed_log(file_name="dur_3.zip", duration=300)
-
-        res_asc = self.client.get(
-            "/api/v1/logs?sortBy=duration&sortOrder=asc&textQuery=dur_",
-            headers=self.eng_headers,
-        )
-        self.assertEqual(res_asc.status_code, 200)
-        items_asc = res_asc.json()["items"]
-        self.assertEqual([x["fileName"] for x in items_asc], ["dur_1.zip", "dur_3.zip", "dur_2.zip"])
-
-        res_desc = self.client.get(
-            "/api/v1/logs?sortBy=duration&sortOrder=desc&textQuery=dur_",
-            headers=self.eng_headers,
-        )
-        self.assertEqual(res_desc.status_code, 200)
-        items_desc = res_desc.json()["items"]
-        self.assertEqual([x["fileName"] for x in items_desc], ["dur_2.zip", "dur_3.zip", "dur_1.zip"])
 
     async def test_rich_stats_and_tag_metrics(self):
         """Verify needs_attention, recent_uploads, uploads_per_month, tag_details, and /tags/stats."""

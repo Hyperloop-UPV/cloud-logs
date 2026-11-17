@@ -5,7 +5,6 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
-  formatDuration,
   formatMonthKey,
   formatRange,
   formatRelative,
@@ -36,31 +35,6 @@ describe("formatBytes", () => {
     "returns EMPTY for invalid byte value: %s",
     (value) => {
       expect(formatBytes(value)).toBe(EMPTY);
-    },
-  );
-});
-
-describe("formatDuration", () => {
-  it("returns <1m for durations under one minute", () => {
-    expect(formatDuration(20)).toBe("<1m");
-  });
-
-  it("formats minute durations", () => {
-    expect(formatDuration(45 * 60)).toBe("45m");
-  });
-
-  it("formats hours and minutes", () => {
-    expect(formatDuration(2 * 3600 + 35 * 60)).toBe("2h 35m");
-  });
-
-  it("formats durations exceeding 24 hours", () => {
-    expect(formatDuration(26 * 3600)).toBe("26h 0m");
-  });
-
-  it.each([null, undefined, Number.NaN, -1, -60])(
-    "returns EMPTY for missing or invalid duration: %s",
-    (value) => {
-      expect(formatDuration(value)).toBe(EMPTY);
     },
   );
 });

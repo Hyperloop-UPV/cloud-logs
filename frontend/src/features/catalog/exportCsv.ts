@@ -15,10 +15,6 @@ const COLUMNS: { header: string; value: (log: Log) => string }[] = [
   { header: "note", value: (log) => log.note ?? "" },
   { header: "creator", value: (log) => log.creator },
   { header: "startDate", value: (log) => log.startDate ?? "" },
-  {
-    header: "duration",
-    value: (log) => (log.duration != null ? String(log.duration) : ""),
-  },
   { header: "createdAt", value: (log) => log.createdAt },
   { header: "completedAt", value: (log) => log.completedAt ?? "" },
   { header: "driveFolder", value: (log) => log.driveFolder ?? "" },

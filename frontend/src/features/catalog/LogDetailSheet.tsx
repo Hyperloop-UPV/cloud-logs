@@ -44,7 +44,6 @@ import {
   EMPTY,
   formatBytes,
   formatDateTime,
-  formatDuration,
   formatRelative,
 } from "../../lib/format";
 import { statusStyle } from "./statusStyles";
@@ -324,25 +323,8 @@ export function LogDetailSheet({
               <section>
                 <dl>
                   <Row label="Window">
-                    {log.startDate ? (
-                      log.duration != null ? (
-                        <>
-                          {formatDateTime(log.startDate)} →{" "}
-                          {formatDateTime(
-                            new Date(
-                              new Date(log.startDate).getTime() +
-                                log.duration * 1000,
-                            ).toISOString(),
-                          )}
-                        </>
-                      ) : (
-                        formatDateTime(log.startDate)
-                      )
-                    ) : (
-                      EMPTY
-                    )}
+                    {log.startDate ? formatDateTime(log.startDate) : EMPTY}
                   </Row>
-                  <Row label="Duration">{formatDuration(log.duration)}</Row>
                   <Row label="Captured">{formatDateTime(log.fileDate)}</Row>
                   <Row label="Size">{formatBytes(log.fileSize)}</Row>
                   <Row label="Registered">{formatDateTime(log.createdAt)}</Row>

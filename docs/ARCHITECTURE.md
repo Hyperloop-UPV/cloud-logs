@@ -106,7 +106,6 @@ erDiagram
         text note "Engineering notes"
         datetime file_date "Capture timestamp"
         datetime start_date "Run acquisition start"
-        integer duration "Run duration in seconds (optional)"
         json client_metadata "Subsystem/runtime metadata"
         Uuid created_by FK "users.id (ON DELETE SET NULL)"
         datetime created_at "Registration timestamp"

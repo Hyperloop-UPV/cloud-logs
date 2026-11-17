@@ -24,7 +24,6 @@ const SORT_KEYS: SortBy[] = [
   "createdAt",
   "fileDate",
   "startDate",
-  "duration",
   "fileName",
   "fileSize",
 ];

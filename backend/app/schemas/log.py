@@ -25,9 +25,6 @@ class LogInitiateRequest(CamelModel):
     start_date: datetime | None = Field(
         default=None, description="Start timestamp of telemetry data"
     )
-    duration: int | None = Field(
-        default=None, ge=0, description="Optional duration in seconds"
-    )
     file_hash: str | None = Field(
         default=None, description="Expected SHA-256 hash if pre-calculated"
     )
@@ -131,7 +128,6 @@ class LogOut(CamelModel):
     client_metadata: dict[str, Any] = Field(default_factory=dict)
     file_date: datetime | None = None
     start_date: datetime | None = None
-    duration: int | None = None
     created_by: UUID | None = None
     creator: str = "unknown"
     created_at: datetime

@@ -83,23 +83,6 @@ export function formatRange(
     : `${dateTime.format(from)} → ${dateTime.format(to)}`;
 }
 
-/** Duracion del run en segundos, en la forma compacta 1h 23m. */
-export function formatDuration(seconds: number | null | undefined): string {
-  if (
-    seconds === null ||
-    seconds === undefined ||
-    Number.isNaN(seconds) ||
-    seconds < 0
-  ) {
-    return EMPTY;
-  }
-  const totalMinutes = Math.round(seconds / 60);
-  if (totalMinutes < 1) return "<1m";
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-}
-
 const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
 const DIVISIONS: { amount: number; unit: Intl.RelativeTimeFormatUnit }[] = [
@@ -122,12 +105,12 @@ export function formatRelative(iso: string | null | undefined): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return EMPTY;
 
-  let duration = (date.getTime() - Date.now()) / 1000;
+  let deltaSeconds = (date.getTime() - Date.now()) / 1000;
   for (const division of DIVISIONS) {
-    if (Math.abs(duration) < division.amount) {
-      return relative.format(Math.round(duration), division.unit);
+    if (Math.abs(deltaSeconds) < division.amount) {
+      return relative.format(Math.round(deltaSeconds), division.unit);
     }
-    duration /= division.amount;
+    deltaSeconds /= division.amount;
   }
   return formatDate(iso);
 }

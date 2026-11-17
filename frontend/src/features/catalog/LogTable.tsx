@@ -25,7 +25,6 @@ import {
   EMPTY,
   formatBytes,
   formatDateTime,
-  formatDuration,
   formatRange,
   formatRelative,
 } from "../../lib/format";
@@ -86,14 +85,6 @@ export function LogTable({
           {isVisible("status") && <PlainHeader label="Status" />}
           {isVisible("window") && (
             <SortableHeader label="Window" col="startDate" {...sortProps} />
-          )}
-          {isVisible("duration") && (
-            <SortableHeader
-              label="Duration"
-              col="duration"
-              align="right"
-              {...sortProps}
-            />
           )}
           {isVisible("size") && (
             <SortableHeader
@@ -198,23 +189,7 @@ export function LogTable({
                     "text-muted-foreground whitespace-nowrap tabular-nums",
                   )}
                 >
-                  {log.startDate
-                    ? log.duration != null
-                      ? formatRange(
-                          log.startDate,
-                          new Date(
-                            new Date(log.startDate).getTime() +
-                              log.duration * 1000,
-                          ).toISOString(),
-                        )
-                      : formatDateTime(log.startDate)
-                    : EMPTY}
-                </td>
-              )}
-
-              {isVisible("duration") && (
-                <td className={cn(pad, "text-right font-mono tabular-nums")}>
-                  {formatDuration(log.duration)}
+                  {log.startDate ? formatDateTime(log.startDate) : EMPTY}
                 </td>
               )}
 

@@ -82,7 +82,6 @@ class Log(Base):
         DateTime(timezone=True),
         nullable=True,
     )
-    duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     client_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSON,
         default=dict,
