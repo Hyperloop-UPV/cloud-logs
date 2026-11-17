@@ -281,6 +281,7 @@ class TestMediumKeyEndpointsIntegration(IsolatedAsyncioTestCase):
             file_name="test.zip",
             status="ready",
             drive_folder="2026_11",
+            drive_file_id="test1234",
             drive_url="https://drive.google.com/file/d/test1234/view",
             file_size=1024,
             created_by=self.user_id,
@@ -296,12 +297,12 @@ class TestMediumKeyEndpointsIntegration(IsolatedAsyncioTestCase):
             # Test via ?token= query param
             response = self.client.get(
                 f"/api/v1/logs/{log_id}/download?token={self.medium_key}",
-                follow_redirects=False,
             )
-            self.assertEqual(response.status_code, status.HTTP_307_TEMPORARY_REDIRECT)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIn("test.zip", response.headers["content-disposition"])
             self.assertEqual(
-                response.headers["location"],
-                "https://drive.google.com/file/d/test1234/view",
+                response.content,
+                b"Simulated telemetry log content for test1234\n",
             )
 
     async def test_patch_log_forbidden(self):

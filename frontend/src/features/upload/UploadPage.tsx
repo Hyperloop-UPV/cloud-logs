@@ -41,7 +41,6 @@ export function UploadPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
   const [rejected, setRejected] = useState<string[]>([]);
 
   const tagSuggestions = useQuery({ queryKey: ["logTags"], queryFn: listTags });
@@ -63,8 +62,7 @@ export function UploadPage() {
         tags,
         note: note || null,
         startDate: toIso(start),
-        endDate: toIso(end),
-        fileDate: toIso(start) ?? toIso(end) ?? null,
+        fileDate: toIso(start) ?? null,
         fileHash: null,
         clientMetadata: {},
       },
@@ -175,25 +173,14 @@ export function UploadPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col gap-1">
-                  <Label className="text-[11px]">Starts</Label>
-                  <Input
-                    type="datetime-local"
-                    value={start}
-                    onChange={(event) => setStart(event.target.value)}
-                    className="h-8 text-xs shadow-none"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Label className="text-[11px]">Ends</Label>
-                  <Input
-                    type="datetime-local"
-                    value={end}
-                    onChange={(event) => setEnd(event.target.value)}
-                    className="h-8 text-xs shadow-none"
-                  />
-                </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-[11px]">Starts</Label>
+                <Input
+                  type="datetime-local"
+                  value={start}
+                  onChange={(event) => setStart(event.target.value)}
+                  className="h-8 text-xs shadow-none"
+                />
               </div>
             </CardContent>
           </Card>

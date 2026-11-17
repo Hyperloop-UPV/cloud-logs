@@ -73,7 +73,7 @@ organisation named in `GITHUB_ORG_NAME`.
 > Point it at the backend and the browser lands on a JSON response instead of
 > coming back to the app.
 
-**The master key** is the service door. Choose *Use a master key instead* on the
+**The master key** is the service door. Choose _Use a master key instead_ on the
 sign-in screen and paste the backend's `MASTER_API_KEY`. It grants full
 administrator access with no user account behind it, so some screens behave
 slightly differently — `/about` and the team page expect a real user row.
@@ -90,14 +90,14 @@ URLs, which is enough to exercise the whole flow.
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Dev server on port 5173, with the `/api` proxy |
-| `npm run build` | Type-checks (`tsc -b`) and builds into `dist/` |
-| `npm run preview` | Serves the built `dist/` locally |
-| `npm run lint` | Oxlint over the project |
-| `npx prettier --write src` | Formats, sorting Tailwind classes |
-| `npx tsc --noEmit -p tsconfig.app.json` | Type-check alone, faster than a build |
+| Command                                 | What it does                                   |
+| --------------------------------------- | ---------------------------------------------- |
+| `npm run dev`                           | Dev server on port 5173, with the `/api` proxy |
+| `npm run build`                         | Type-checks (`tsc -b`) and builds into `dist/` |
+| `npm run preview`                       | Serves the built `dist/` locally               |
+| `npm run lint`                          | Oxlint over the project                        |
+| `npx prettier --write src`              | Formats, sorting Tailwind classes              |
+| `npx tsc --noEmit -p tsconfig.app.json` | Type-check alone, faster than a build          |
 
 The last two have no npm script of their own. `npm run build` type-checks
 anyway, so a clean build is the real gate.
@@ -121,16 +121,16 @@ src/
   routes/      Sign-in, OAuth callback, route guard
 ```
 
-| Route | Screen |
-| --- | --- |
-| `/` | Dashboard — totals, uploads per month, status, recent activity |
+| Route      | Screen                                                               |
+| ---------- | -------------------------------------------------------------------- |
+| `/`        | Dashboard — totals, uploads per month, status, recent activity       |
 | `/catalog` | Search, filters, saved views, bulk tagging, CSV export, detail panel |
-| `/tags` | Tag collections, as cards or a sortable table |
-| `/graph` | Force graph: one node per log, one per tag |
-| `/upload` | Two-phase upload, straight to Drive |
-| `/team` | Users and cleanup (admin only) |
-| `/about` | Credits and service status |
-| `/signin` | GitHub OAuth and master key |
+| `/tags`    | Tag collections, as cards or a sortable table                        |
+| `/graph`   | Force graph: one node per log, one per tag                           |
+| `/upload`  | Two-phase upload, straight to Drive                                  |
+| `/team`    | Users and cleanup (admin only)                                       |
+| `/about`   | Credits and service status                                           |
+| `/signin`  | GitHub OAuth and master key                                          |
 
 Only the catalog ships in the main bundle, because it is the screen used daily.
 The rest load on visit — the dashboard pulls in uPlot and the graph pulls in

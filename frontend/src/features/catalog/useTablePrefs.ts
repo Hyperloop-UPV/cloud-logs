@@ -11,7 +11,6 @@ import { useCallback, useEffect, useState } from "react";
 export const COLUMNS = [
   { id: "status", label: "Status" },
   { id: "window", label: "Window" },
-  { id: "duration", label: "Duration" },
   { id: "size", label: "Size" },
   { id: "tags", label: "Tags" },
   { id: "creator", label: "Uploaded by" },

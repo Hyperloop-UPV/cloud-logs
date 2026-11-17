@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -368,6 +369,54 @@ class GoogleDriveService:
             "drive_url": f"https://drive.google.com/file/d/{drive_file_id or f'gdrive_{log_id}'}/view",
             "file_size": None,
         }
+
+    async def stream_file_content(
+        self, drive_file_id: str, chunk_size: int = 65536
+    ) -> AsyncGenerator[bytes, None]:
+        """Stream file bytes from Google Drive without loading the file into memory."""
+        if self.simulation_mode:
+            logger.info(
+                "Simulation mode is active: streaming mock content for '%s",
+                drive_file_id,
+            )
+            yield f"Simulated telemetry log content for {drive_file_id}\n".encode()
+            return
+        token = await self._get_access_token()
+        url = f"https://www.googleapis.com/drive/v3/files/{drive_file_id}"
+        headers = {"Authorization": f"Bearer {token}"}
+        params = {"alt": "media", "supportsAllDrives": "true"}
+
+        try:
+            async with (
+                httpx.AsyncClient(timeout=None) as client,
+                client.stream("GET", url, headers=headers, params=params) as resp,
+            ):
+                if resp.status_code != 200:
+                    error_body = await resp.aread()
+                    logger.error(
+                        "Google Drive returned %d when streaming file '%s': %s",
+                        resp.status_code,
+                        drive_file_id,
+                        error_body.decode(errors="replace"),
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Failed to download file from Google Drive",
+                    )
+
+                async for chunk in resp.aiter_bytes(chunk_size=chunk_size):
+                    yield chunk
+
+        except httpx.HTTPError as e:
+            logger.error(
+                "HTTP error streaming file '%s' from Google Drive: %s",
+                drive_file_id,
+                e,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Error streaming file from Google Drive: {e!s}",
+            ) from e
 
 
 gdrive_service = GoogleDriveService()

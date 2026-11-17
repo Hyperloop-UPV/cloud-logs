@@ -25,8 +25,6 @@ import {
   EMPTY,
   formatBytes,
   formatDateTime,
-  formatDuration,
-  formatRange,
   formatRelative,
 } from "../../lib/format";
 import { statusStyle } from "./statusStyles";
@@ -86,9 +84,6 @@ export function LogTable({
           {isVisible("status") && <PlainHeader label="Status" />}
           {isVisible("window") && (
             <SortableHeader label="Window" col="startDate" {...sortProps} />
-          )}
-          {isVisible("duration") && (
-            <PlainHeader label="Duration" align="right" />
           )}
           {isVisible("size") && (
             <SortableHeader
@@ -193,13 +188,7 @@ export function LogTable({
                     "text-muted-foreground whitespace-nowrap tabular-nums",
                   )}
                 >
-                  {formatRange(log.startDate, log.endDate)}
-                </td>
-              )}
-
-              {isVisible("duration") && (
-                <td className={cn(pad, "text-right font-mono tabular-nums")}>
-                  {formatDuration(log.startDate, log.endDate)}
+                  {log.startDate ? formatDateTime(log.startDate) : EMPTY}
                 </td>
               )}
 

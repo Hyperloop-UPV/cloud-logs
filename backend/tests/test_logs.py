@@ -133,7 +133,9 @@ class TestLogsAPI(TestCase):
             self.assertEqual(response.status_code, 200)
             mock_gdrive.create_resumable_upload_session.assert_called_once()
             _, kwargs = mock_gdrive.create_resumable_upload_session.call_args
-            self.assertEqual(kwargs.get("client_origin"), "https://logs.hyperloopupv.com")
+            self.assertEqual(
+                kwargs.get("client_origin"), "https://logs.hyperloopupv.com"
+            )
         finally:
             app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
                 simulation_mode=True
@@ -163,7 +165,9 @@ class TestLogsAPI(TestCase):
             self.assertEqual(response.status_code, 200)
             mock_gdrive.create_resumable_upload_session.assert_called_once()
             _, kwargs = mock_gdrive.create_resumable_upload_session.call_args
-            self.assertEqual(kwargs.get("client_origin"), "https://dashboard.hyperloopupv.com")
+            self.assertEqual(
+                kwargs.get("client_origin"), "https://dashboard.hyperloopupv.com"
+            )
         finally:
             app.dependency_overrides[get_gdrive_service] = lambda: GoogleDriveService(
                 simulation_mode=True
@@ -436,10 +440,14 @@ class TestLogsAPI(TestCase):
         response = self.client.get(
             f"/api/v1/logs/{log_id}/download",
             headers=self.headers,
-            follow_redirects=False,
         )
-        self.assertEqual(response.status_code, 307)
-        self.assertEqual(response.headers["location"], ready_log.drive_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response.headers["content-disposition"])
+        self.assertIn(ready_log.file_name, response.headers["content-disposition"])
+        self.assertEqual(
+            response.content,
+            f"Simulated telemetry log content for {ready_log.drive_file_id}\n".encode(),
+        )
 
     def test_download_log_not_ready_fails(self):
         log_id = uuid.uuid4()
@@ -472,10 +480,12 @@ class TestLogsAPI(TestCase):
 
         response = self.client.get(
             f"/api/v1/logs/{log_id}/download?token={self.token}",
-            follow_redirects=False,
         )
-        self.assertEqual(response.status_code, 307)
-        self.assertEqual(response.headers["location"], ready_log.drive_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.content,
+            f"Simulated telemetry log content for {ready_log.drive_file_id}\n".encode(),
+        )
 
     def test_simulated_upload_endpoint(self):
         log_id = uuid.uuid4()
@@ -743,19 +753,6 @@ class TestLogsAPI(TestCase):
         )
         self.assertEqual(delete_res.status_code, 204)
 
-    def test_log_out_duration_computation(self):
-        """LogOut computed field duration."""
-        sample_log = self._create_sample_log()
-        sample_log.start_date = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
-        sample_log.end_date = datetime(2026, 10, 23, 10, 5, 30, tzinfo=UTC)
-
-        self.mock_result.scalar_one_or_none.return_value = sample_log
-        res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data["duration"], 330.0)
-        self.assertNotIn("durationSeconds", data)
-
     def test_get_tags_stats_endpoint(self):
         """GET /api/v1/logs/tags/stats returns rich tag breakdown."""
         sample_log = self._create_sample_log(tags=["pod", "bms"])
@@ -792,20 +789,6 @@ class TestLogsAPI(TestCase):
             "/api/v1/logs?metadataQuery=test_run", headers=self.headers
         )
         self.assertEqual(res.status_code, 200)
-
-    def test_duration_with_mixed_naive_aware_timezones(self):
-        """Verify duration calculation does not raise TypeError when mixing naive and aware datetimes."""
-        sample_log = self._create_sample_log(status="ready")
-        # start_date is naive, end_date is aware
-        sample_log.start_date = datetime(2026, 10, 23, 10, 0, 0)
-        sample_log.end_date = datetime(2026, 10, 23, 10, 2, 0, tzinfo=UTC)
-
-        self.mock_result.scalar_one_or_none.return_value = sample_log
-        res = self.client.get(f"/api/v1/logs/{sample_log.id}", headers=self.headers)
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data["duration"], 120.0)
-        self.assertEqual(sample_log.duration, 120.0)
 
     def test_search_logs_empty_results(self):
         """Search query returning 0 results returns empty list and total 0."""
@@ -991,7 +974,7 @@ class TestLogsAPI(TestCase):
         log3 = self._create_sample_log(tags=["orphan"])
         log3.drive_folder = None
         log3.file_date = None
-        log3.created_at = None
+        log3.created_at = None  # type: ignore[assignment]
 
         stats = compute_monthly_upload_stats([log1, log2, log3])
         folders = [s.folder for s in stats]
@@ -999,17 +982,19 @@ class TestLogsAPI(TestCase):
         self.assertIn("2026_09", folders)
         self.assertEqual(len(stats), 2)
 
-    def test_download_log_missing_drive_url(self):
-        """download_log_file raises 404 if log is ready but has no drive_url."""
+    def test_download_log_missing_drive_file_id(self):
+        """download_log raises 404 if log is ready but has no drive_file_id."""
         log_id = uuid.uuid4()
         ready_log = self._create_sample_log(log_id=log_id, status="ready")
-        ready_log.drive_url = None
+        ready_log.drive_file_id = None
         self.mock_result.scalar_one_or_none.return_value = ready_log
 
         response = self.client.get(
             f"/api/v1/logs/{log_id}/download",
             headers=self.headers,
-            follow_redirects=False,
         )
         self.assertEqual(response.status_code, 404)
-        self.assertIn("Google Drive URL is not available", response.json()["detail"])
+        self.assertIn(
+            "Google Drive file ID is not available for this log",
+            response.json()["detail"],
+        )

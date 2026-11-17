@@ -103,7 +103,7 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
 - **Optional Query Parameters**:
   - `page`: Page index (e.g., `1`, default: `1`).
   - `pageSize`: Items per page (e.g., `20`, default: `50`, max: `100`).
-  - `sortBy`: Field to order by (`createdAt`, `fileDate`, `startDate`, `endDate`, `fileName`, `fileSize`, default: `createdAt`).
+  - `sortBy`: Field to order by (`createdAt`, `fileDate`, `startDate`, `fileName`, `fileSize`, default: `createdAt`).
   - `sortOrder`: Sort direction (`asc` or `desc`, default: `desc`).
   - `textQuery`: Substring search in filenames and notes (e.g., `propulsion`).
   - `tags`: Comma-separated list of required tags (e.g., `pod,bms`).
@@ -142,8 +142,6 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
       },
       "fileDate": "2026-10-23T10:00:00Z",
       "startDate": "2026-10-23T10:00:00Z",
-      "endDate": "2026-10-23T10:15:00Z",
-      "duration": 900.0,
       "createdBy": "a3b1c2d3-...",
       "creator": "john_eng",
       "createdAt": "2026-10-23T10:00:02Z",
@@ -222,7 +220,6 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
       "status": "ready",
       "driveFolder": "2026_10",
       "fileSize": 104857600,
-      "duration": 900.0,
       "createdAt": "2026-10-23T10:00:02Z"
     }
   ],

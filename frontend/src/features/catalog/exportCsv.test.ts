@@ -12,7 +12,6 @@ function makeSampleLog(overrides: Partial<Log> = {}): Log {
     note: "Normal test run",
     creator: "engineer-1",
     startDate: "2026-03-12T10:00:00Z",
-    endDate: "2026-03-12T10:30:00Z",
     createdAt: "2026-03-12T09:55:00Z",
     completedAt: "2026-03-12T10:31:00Z",
     driveFolder: "2026_03",
@@ -111,7 +110,6 @@ describe("toCsv", () => {
       '"note"',
       '"creator"',
       '"startDate"',
-      '"endDate"',
       '"createdAt"',
       '"completedAt"',
       '"driveFolder"',
@@ -125,7 +123,6 @@ describe("toCsv", () => {
   it("formats dates and handles missing/null dates gracefully", () => {
     const logWithDates = makeSampleLog({
       startDate: "2026-03-12T10:00:00Z",
-      endDate: "2026-03-12T11:00:00Z",
       completedAt: "2026-03-12T11:05:00Z",
       createdAt: "2026-03-12T09:50:00Z",
     });
@@ -133,7 +130,6 @@ describe("toCsv", () => {
     const logWithoutDates = makeSampleLog({
       id: "log-2",
       startDate: null,
-      endDate: null,
       completedAt: null,
       createdAt: "2026-03-12T09:50:00Z",
     });
@@ -141,12 +137,10 @@ describe("toCsv", () => {
     const [row1, row2] = parseCsvRows(toCsv([logWithDates, logWithoutDates]));
 
     expect(row1.startDate).toBe("2026-03-12T10:00:00Z");
-    expect(row1.endDate).toBe("2026-03-12T11:00:00Z");
     expect(row1.completedAt).toBe("2026-03-12T11:05:00Z");
     expect(row1.createdAt).toBe("2026-03-12T09:50:00Z");
 
     expect(row2.startDate).toBe("");
-    expect(row2.endDate).toBe("");
     expect(row2.completedAt).toBe("");
   });
 
