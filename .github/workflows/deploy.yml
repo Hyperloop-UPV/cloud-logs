@@ -20,6 +20,7 @@ jobs:
           GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           MASTER_API_KEY: ${{ secrets.MASTER_API_KEY }}
+          MEDIUM_API_KEY: ${{ secrets.MEDIUM_API_KEY }}
           _GITHUB_CLIENT_ID: ${{ secrets._GITHUB_CLIENT_ID }}
           _GITHUB_CLIENT_SECRET: ${{ secrets._GITHUB_CLIENT_SECRET }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -30,6 +31,7 @@ jobs:
           [ -z "$GDRIVE_SERVICE_ACCOUNT_JSON" ] && MISSING="$MISSING GDRIVE_SERVICE_ACCOUNT_JSON"
           [ -z "$JWT_SECRET" ] && MISSING="$MISSING JWT_SECRET"
           [ -z "$MASTER_API_KEY" ] && MISSING="$MISSING MASTER_API_KEY"
+          [ -z "MEDIUM_API_KEY" ] && MISSING="$MISSING MEDIUM_API_KEY"
           [ -z "$_GITHUB_CLIENT_ID" ] && MISSING="$MISSING _GITHUB_CLIENT_ID"
           [ -z "$_GITHUB_CLIENT_SECRET" ] && MISSING="$MISSING _GITHUB_CLIENT_SECRET"
           [ -z "$SSH_HOST" ] && MISSING="$MISSING SSH_HOST"
@@ -68,6 +70,7 @@ jobs:
             GDRIVE_SERVICE_ACCOUNT_PATH=/app/credentials/service_account.json
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             MASTER_API_KEY=${{ secrets.MASTER_API_KEY }}
+            MEDIUM_API_KEY=${{ secrets.MEDIUM_API_KEY }}
             GITHUB_CLIENT_ID=${{ secrets._GITHUB_CLIENT_ID }}
             GITHUB_CLIENT_SECRET=${{ secrets._GITHUB_CLIENT_SECRET }}
             _GITHUB_CLIENT_ID=${{ secrets._GITHUB_CLIENT_ID }}
