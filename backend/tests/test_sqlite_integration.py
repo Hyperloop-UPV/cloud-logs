@@ -100,7 +100,8 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         status: str = "ready",
         file_size: int = 1024,
         created_by: uuid.UUID | None = None,
-        created_at: datetime | None = None,
+        upload_date: datetime | None = None,
+        log_date: datetime | None = None,
         **kwargs,
     ) -> Log:
         """Helper to create and persist a Log with sensible defaults."""
@@ -111,7 +112,8 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 status=status,
                 file_size=file_size,
                 created_by=created_by or self.engineer_id,
-                created_at=created_at or datetime.now(UTC),
+                upload_date=upload_date or datetime.now(UTC),
+                log_date=log_date,
                 **kwargs,
             )
             session.add(log_item)
@@ -356,7 +358,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_10",
             file_size=2000,
             tags=["pod", "bms"],
-            created_at=now,
+            upload_date=now,
         )
         await self.seed_log(
             file_name="ready_02.zip",
@@ -364,7 +366,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_10",
             file_size=3000,
             tags=["pod", "telemetria"],
-            created_at=now,
+            upload_date=now,
         )
         await self.seed_log(
             file_name="pending_01.zip",
@@ -372,7 +374,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_09",
             file_size=5000,
             tags=["motor"],
-            created_at=now,
+            upload_date=now,
         )
         await self.seed_log(
             file_name="aborted_01.zip",
@@ -380,7 +382,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_09",
             file_size=1000,
             tags=["frenos"],
-            created_at=now,
+            upload_date=now,
         )
 
         res = self.client.get("/api/v1/logs/stats", headers=self.viewer_headers)
@@ -650,7 +652,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 file_name="abandoned_upload.zip",
                 file_size=1024,
                 status="pending_upload",
-                created_at=t_old_35,
+                upload_date=t_old_35,
                 created_by=self.engineer_id,
             )
             log_old_aborted = Log(
@@ -658,7 +660,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 file_name="aborted_upload.zip",
                 file_size=2048,
                 status="aborted",
-                created_at=t_old_40,
+                upload_date=t_old_40,
                 created_by=self.engineer_id,
             )
             log_old_failed = Log(
@@ -666,7 +668,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 file_name="failed_upload.zip",
                 file_size=4096,
                 status="failed",
-                created_at=t_old_32,
+                upload_date=t_old_32,
                 created_by=self.engineer_id,
             )
             # 2. Stale completed log (> 30 days old) -> MUST NEVER BE DELETED
@@ -677,7 +679,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 status="ready",
                 drive_file_id="gdrive_historic_file_123",
                 drive_url="https://drive.google.com/file/d/historic",
-                created_at=t_old_45,
+                upload_date=t_old_45,
                 created_by=self.engineer_id,
             )
             # 3. Recent logs (< 30 days old) -> MUST NOT BE DELETED
@@ -686,7 +688,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 file_name="recent_upload.zip",
                 file_size=512,
                 status="pending_upload",
-                created_at=t_recent,
+                upload_date=t_recent,
                 created_by=self.engineer_id,
             )
             log_recent_ready = Log(
@@ -696,7 +698,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 status="ready",
                 drive_file_id="gdrive_recent_file_456",
                 drive_url="https://drive.google.com/file/d/recent",
-                created_at=t_recent,
+                upload_date=t_recent,
                 created_by=self.engineer_id,
             )
             # 4. Old soft-deleted log
@@ -705,7 +707,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
                 file_name="already_deleted_ancient.zip",
                 file_size=256,
                 status="pending_upload",
-                created_at=t_old_60,
+                upload_date=t_old_60,
                 deleted_at=t_old_35,
                 created_by=self.engineer_id,
             )
@@ -888,14 +890,14 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         self.assertEqual(detail_data["driveFileId"], "custom_gdrive_file_abc123")
         self.assertIn("custom_gdrive_file_abc123", detail_data["driveUrl"])
 
-    async def test_file_date_persistence_and_sorting(self):
-        """Verify that fileDate is saved, returned in LogOut, and usable in sortBy."""
+    async def test_log_date_persistence_and_sorting(self):
+        """Verify that logDate is saved, returned in LogOut, and usable in sortBy."""
         res = self.client.post(
             "/api/v1/logs/initiate",
             json={
                 "fileName": "test_dated_telemetry.zip",
                 "fileSize": 1024,
-                "fileDate": "2026-05-15T10:30:00Z",
+                "logDate": "2026-05-15T10:30:00Z",
                 "tags": ["dated_test"],
             },
             headers=self.eng_headers,
@@ -906,15 +908,35 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         detail = self.client.get(
             f"/api/v1/logs/{log_id}", headers=self.eng_headers
         ).json()
-        self.assertIn("fileDate", detail)
-        self.assertTrue(detail["fileDate"].startswith("2026-05-15"))
+        self.assertIn("logDate", detail)
+        self.assertIn("uploadDate", detail)
+        self.assertTrue(detail["logDate"].startswith("2026-05-15"))
 
-        # Verify sorting by fileDate
+        # Verify sorting by logDate
         search_res = self.client.get(
-            "/api/v1/logs?sortBy=fileDate&sortOrder=desc",
+            "/api/v1/logs?sortBy=logDate&sortOrder=desc",
             headers=self.eng_headers,
         )
         self.assertEqual(search_res.status_code, 200)
+
+        # Verify sorting by uploadDate
+        search_upload_res = self.client.get(
+            "/api/v1/logs?sortBy=uploadDate&sortOrder=desc",
+            headers=self.eng_headers,
+        )
+        self.assertEqual(search_upload_res.status_code, 200)
+
+        # Verify invalid legacy sortBy returns 400
+        search_invalid = self.client.get(
+            "/api/v1/logs?sortBy=fileDate&sortOrder=desc",
+            headers=self.eng_headers,
+        )
+        self.assertEqual(search_invalid.status_code, 400)
+        search_invalid_created = self.client.get(
+            "/api/v1/logs?sortBy=createdAt&sortOrder=desc",
+            headers=self.eng_headers,
+        )
+        self.assertEqual(search_invalid_created.status_code, 400)
 
     async def test_refresh_token_rotation_end_to_end_sqlite(self):
         """Verify full Refresh Token Rotation lifecycle against real SQLite:
@@ -1022,24 +1044,24 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         )
 
     async def test_date_filtering(self):
-        """Verify date filters in search_logs using start_date with file_date fallback."""
+        """Verify date filters in search_logs using fromDate and toDate with log_date."""
         t1000 = datetime(2026, 10, 23, 10, 0, 0, tzinfo=UTC)
         t1045 = datetime(2026, 10, 23, 10, 45, 0, tzinfo=UTC)
         t1100 = datetime(2026, 10, 23, 11, 0, 0, tzinfo=UTC)
         t1200 = datetime(2026, 10, 23, 12, 0, 0, tzinfo=UTC)
 
-        await self.seed_log(file_name="filter_A.zip", start_date=t1000)
-        await self.seed_log(file_name="filter_B.zip", start_date=t1100)
-        await self.seed_log(file_name="filter_C.zip", start_date=t1200)
-        await self.seed_log(file_name="filter_D.zip", file_date=t1045)
+        await self.seed_log(file_name="filter_A.zip", log_date=t1000)
+        await self.seed_log(file_name="filter_B.zip", log_date=t1100)
+        await self.seed_log(file_name="filter_C.zip", log_date=t1200)
+        await self.seed_log(file_name="filter_D.zip", log_date=t1045)
 
         # Query interval: [10:45, 11:15]
         # fB (11:00) is within [10:45, 11:15]
-        # fD (file_date 10:45) is within [10:45, 11:15] via coalesce fallback
+        # fD (10:45) is within [10:45, 11:15]
         # fA (10:00) is < 10:45
         # fC (12:00) is > 11:15
         res = self.client.get(
-            "/api/v1/logs?startDate=2026-10-23T10:45:00Z&endDate=2026-10-23T11:15:00Z&textQuery=filter_",
+            "/api/v1/logs?fromDate=2026-10-23T10:45:00Z&toDate=2026-10-23T11:15:00Z&textQuery=filter_",
             headers=self.eng_headers,
         )
         self.assertEqual(res.status_code, 200)
@@ -1058,7 +1080,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_06",
             file_size=1000,
             tags=["pcu", "debug"],
-            created_at=datetime(2026, 6, 15, 10, 0, 0, tzinfo=UTC),
+            upload_date=datetime(2026, 6, 15, 10, 0, 0, tzinfo=UTC),
         )
         await self.seed_log(
             file_name="jul_log.zip",
@@ -1066,14 +1088,14 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_07",
             file_size=2000,
             tags=["pcu", "bench"],
-            created_at=datetime(2026, 7, 20, 10, 0, 0, tzinfo=UTC),
+            upload_date=datetime(2026, 7, 20, 10, 0, 0, tzinfo=UTC),
         )
         await self.seed_log(
             file_name="nov_ready.zip",
             drive_folder="2026_11",
             file_size=3000,
             tags=["bms", "pcu"],
-            created_at=now,
+            upload_date=now,
         )
         await self.seed_log(
             file_name="nov_failed.zip",
@@ -1081,7 +1103,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_11",
             file_size=500,
             tags=["bms"],
-            created_at=now,
+            upload_date=now,
         )
         await self.seed_log(
             file_name="nov_aborted.zip",
@@ -1089,7 +1111,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
             drive_folder="2026_11",
             file_size=500,
             tags=["debug"],
-            created_at=now,
+            upload_date=now,
         )
 
         # 1. Test /api/v1/logs/stats
@@ -1100,7 +1122,7 @@ class TestSQLiteIntegration(IsolatedAsyncioTestCase):
         # Needs attention: pending_upload (1) + failed (1) + aborted (1) = 3
         self.assertEqual(stats["needsAttention"], 3)
 
-        # Recent uploads: at most 5 items ordered by created_at desc
+        # Recent uploads: at most 5 items ordered by upload_date desc
         self.assertLessEqual(len(stats["recentUploads"]), 5)
         self.assertGreaterEqual(len(stats["recentUploads"]), 3)
         self.assertIn("fileName", stats["recentUploads"][0])

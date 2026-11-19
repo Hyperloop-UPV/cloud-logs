@@ -41,12 +41,6 @@ const dateOnly = new Intl.DateTimeFormat("en-GB", {
   year: "numeric",
 });
 
-const timeOnly = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
-
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return EMPTY;
   const date = new Date(iso);
@@ -59,28 +53,6 @@ export function formatDate(iso: string | null | undefined): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return EMPTY;
   return dateOnly.format(date);
-}
-
-/**
- * Ventana temporal del run. Si empieza y acaba el mismo dia se omite la fecha del
- * final, que es la forma en que un ingeniero lee un run: "12 Mar 2026 10:04 → 10:19".
- */
-export function formatRange(
-  start: string | null | undefined,
-  end: string | null | undefined,
-): string {
-  if (!start && !end) return EMPTY;
-  if (!start) return `… → ${formatDateTime(end)}`;
-  if (!end) return `${formatDateTime(start)} → …`;
-
-  const from = new Date(start);
-  const to = new Date(end);
-  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return EMPTY;
-
-  const sameDay = from.toDateString() === to.toDateString();
-  return sameDay
-    ? `${dateTime.format(from)} → ${timeOnly.format(to)}`
-    : `${dateTime.format(from)} → ${dateTime.format(to)}`;
 }
 
 const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });

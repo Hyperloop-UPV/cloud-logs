@@ -20,7 +20,7 @@ Telemetry binaries (e.g., ZIP archives) are **never sent directly through the AP
 {
   "fileName": "run_42_telemetry.zip",
   "fileSize": 104857600,
-  "fileDate": "2026-10-23T10:00:00Z",
+  "logDate": "2026-10-23T10:00:00Z",
   "tags": ["pod", "propulsion"],
   "note": "Track run with inverter at 80% throttle",
   "clientMetadata": {
@@ -31,6 +31,10 @@ Telemetry binaries (e.g., ZIP archives) are **never sent directly through the AP
   }
 }
 ```
+> **Date Fields for Instantaneous Logs**:
+> - `logDate` (ISO string, optional): Fecha de registro del log (instantaneous telemetry/log timestamp point-in-time). If omitted, the server defaults to current UTC time.
+> - `uploadDate` (ISO string): Fecha de subida y registro a la plataforma (assigned automatically by the server upon initiation).
+>
 > **Note on `clientMetadata`**: Flexible JSON dictionary capturing client/runtime context (local machine hostname, pod runner UUID, sensor metadata). Stored for internal audit trails and administrator-only filtering.
 
 - **Response Payload**:
@@ -103,19 +107,23 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
 - **Optional Query Parameters**:
   - `page`: Page index (e.g., `1`, default: `1`).
   - `pageSize`: Items per page (e.g., `20`, default: `50`, max: `100`).
-  - `sortBy`: Field to order by (`createdAt`, `fileDate`, `startDate`, `fileName`, `fileSize`, default: `createdAt`).
+  - `sortBy`: Field to order by (`uploadDate`, `logDate`, `fileName`, `fileSize`, default: `uploadDate`).
   - `sortOrder`: Sort direction (`asc` or `desc`, default: `desc`).
   - `textQuery`: Substring search in filenames and notes (e.g., `propulsion`).
   - `tags`: Comma-separated list of required tags (e.g., `pod,bms`).
   - `driveFolder`: Filter by monthly folder (e.g., `2026_10`).
   - `status`: Filter by state (`ready`, `pending_upload`, `aborted`, `failed`).
-  - `startDate`: Logs recorded/active after ISO timestamp (overlapping interval filter).
-  - `endDate`: Logs recorded/active before ISO timestamp (overlapping interval filter).
+  - `fromDate`: Filter logs captured on or after ISO timestamp (filters by `logDate`).
+  - `toDate`: Filter logs captured on or before ISO timestamp (filters by `logDate`).
   - `creator`: Filter by creator's username (e.g., `john_eng`).
   - `metadataQuery`: Substring search across `clientMetadata` (available to all authenticated users).
 
+> **Understanding Instantaneous Log Timestamps**:
+> - `logDate` (ISO string): Fecha de registro del log (instantaneous telemetry/log timestamp). Represents the exact point in time when the telemetry was recorded. Filters `fromDate` and `toDate` compare against this field.
+> - `uploadDate` (ISO string): Fecha de subida a la plataforma. Represents when the log entry was registered on the platform. Default sort column (`sortBy=uploadDate&sortOrder=desc`).
+
 **Example URL**:  
-`/api/v1/logs?page=1&pageSize=20&sortBy=fileName&sortOrder=asc&tags=pod,motor&status=ready`
+`/api/v1/logs?page=1&pageSize=20&sortBy=uploadDate&sortOrder=desc&tags=pod,motor&status=ready&fromDate=2026-10-01T00:00:00Z&toDate=2026-10-31T23:59:59Z`
 
 **Response Payload**:
 ```json
@@ -140,11 +148,10 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
         "clientUser": "operator_john",
         "runUuid": "550e8400-e29b-41d4-a716-446655440000"
       },
-      "fileDate": "2026-10-23T10:00:00Z",
-      "startDate": "2026-10-23T10:00:00Z",
+      "logDate": "2026-10-23T10:00:00Z",
       "createdBy": "a3b1c2d3-...",
       "creator": "john_eng",
-      "createdAt": "2026-10-23T10:00:02Z",
+      "uploadDate": "2026-10-23T10:00:02Z",
       "completedAt": "2026-10-23T10:01:10Z"
     }
   ]
@@ -220,7 +227,8 @@ The frontend or client performs a direct `PUT` with binary bytes to the `uploadU
       "status": "ready",
       "driveFolder": "2026_10",
       "fileSize": 104857600,
-      "createdAt": "2026-10-23T10:00:02Z"
+      "logDate": "2026-10-23T10:00:00Z",
+      "uploadDate": "2026-10-23T10:00:02Z"
     }
   ],
   "tagDetails": [

@@ -35,11 +35,10 @@ export interface Log {
   tags: string[];
   note: string | null;
   clientMetadata: Record<string, unknown>;
-  fileDate: string | null;
-  startDate: string | null;
+  logDate: string | null;
   createdBy: string | null;
   creator: string;
-  createdAt: string;
+  uploadDate: string;
   completedAt: string | null;
 }
 
@@ -50,11 +49,10 @@ export interface LogPage {
   items: Log[];
 }
 
-export type SortBy =
-  "createdAt" | "fileDate" | "startDate" | "fileName" | "fileSize";
+export type SortBy = "uploadDate" | "logDate" | "fileName" | "fileSize";
 export type SortOrder = "asc" | "desc";
 
-/** Filtros de GET /logs. startDate/endDate filtran logs cuyo intervalo solapa la ventana. */
+/** Filtros de GET /logs. fromDate/toDate filtran logs por fecha de registro (logDate). */
 export interface LogQuery {
   page?: number;
   pageSize?: number;
@@ -62,8 +60,8 @@ export interface LogQuery {
   tags?: string[];
   driveFolder?: string;
   status?: LogStatus;
-  startDate?: string;
-  endDate?: string;
+  fromDate?: string;
+  toDate?: string;
   creator?: string;
   sortBy?: SortBy;
   sortOrder?: SortOrder;
@@ -74,8 +72,7 @@ export interface LogQuery {
 export interface LogInitiateRequest {
   fileName: string;
   fileSize: number;
-  fileDate?: string | null;
-  startDate?: string | null;
+  logDate?: string | null;
   fileHash?: string | null;
   tags?: string[];
   note?: string | null;

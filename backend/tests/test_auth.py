@@ -711,4 +711,3 @@ class TestProductionSettingsValidation(TestCase):
         self.assertEqual(s.github_client_id, "gh_secret_alias_id")
         self.assertEqual(s.github_client_secret, "gh_secret_alias_secret")
         self.assertEqual(s.gdrive_service_account_json, '{"test": 1}')
-

@@ -39,7 +39,7 @@ async def execute_cleanup(
     orphaned_stmt = select(Log).where(
         Log.deleted_at.is_(None),
         Log.status.in_(["pending_upload", "aborted", "failed"]),
-        Log.created_at < cutoff,
+        Log.upload_date < cutoff,
     )
     orphaned_res = await db.execute(orphaned_stmt)
     orphaned_logs = orphaned_res.scalars().all()

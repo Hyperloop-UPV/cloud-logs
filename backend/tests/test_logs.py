@@ -72,7 +72,7 @@ class TestLogsAPI(TestCase):
             note="Sample test log note",
             client_metadata={"run": 1},
             created_by=self.user_id,
-            created_at=now,
+            upload_date=now,
         )
         log.creator_user = self.user
         return log
@@ -81,7 +81,7 @@ class TestLogsAPI(TestCase):
         payload = {
             "fileName": "track_run_01.zip",
             "fileSize": 2097152,
-            "fileDate": "2026-10-23T12:00:00Z",
+            "logDate": "2026-10-23T12:00:00Z",
             "tags": ["propulsion", "track"],
             "note": "First run in October",
             "clientMetadata": {"podVersion": "V3"},
@@ -107,7 +107,7 @@ class TestLogsAPI(TestCase):
         self.assertEqual(added_log.file_name, "track_run_01.zip")
         self.assertEqual(added_log.drive_folder, "2026_10")
         self.assertEqual(added_log.created_by, self.user_id)
-        self.assertIsNotNone(added_log.file_date)
+        self.assertIsNotNone(added_log.log_date)
 
     def test_initiate_upload_with_origin_header(self):
         mock_gdrive = MagicMock(spec=GoogleDriveService)
@@ -266,7 +266,7 @@ class TestLogsAPI(TestCase):
         self.mock_result.scalars.return_value.all.return_value = [sample_log]
 
         response = self.client.get(
-            "/api/v1/logs?creator=engineer_user&startDate=2026-10-01T00:00:00Z&endDate=2026-10-31T23:59:59Z",
+            "/api/v1/logs?creator=engineer_user&fromDate=2026-10-01T00:00:00Z&toDate=2026-10-31T23:59:59Z",
             headers=self.headers,
         )
         self.assertEqual(response.status_code, 200)
@@ -500,11 +500,12 @@ class TestLogsAPI(TestCase):
         self.mock_result.scalar.return_value = 1
         self.mock_result.scalars.return_value.all.return_value = [sample_log]
 
-        response = self.client.get(
-            "/api/v1/logs?sortBy=fileSize&sortOrder=asc",
-            headers=self.headers,
-        )
-        self.assertEqual(response.status_code, 200)
+        for sort_field in ("uploadDate", "logDate", "fileName", "fileSize"):
+            response = self.client.get(
+                f"/api/v1/logs?sortBy={sort_field}&sortOrder=asc",
+                headers=self.headers,
+            )
+            self.assertEqual(response.status_code, 200)
 
     def test_search_logs_invalid_sort_by(self):
         response = self.client.get(
@@ -513,6 +514,10 @@ class TestLogsAPI(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid sortBy", response.json()["detail"])
+        self.assertIn(
+            "Allowed fields: uploadDate, logDate, fileName, fileSize",
+            response.json()["detail"],
+        )
 
     def test_search_logs_invalid_sort_order(self):
         response = self.client.get(
@@ -958,23 +963,23 @@ class TestLogsAPI(TestCase):
         self.assertEqual(pending_log.file_size, 16384)
 
     def test_get_tags_stats_with_fallback_dates(self):
-        """compute_monthly_upload_stats falls back to file_date/created_at if drive_folder is invalid or missing."""
+        """compute_monthly_upload_stats falls back to log_date/upload_date if drive_folder is invalid or missing."""
         from app.api.v1.logs import compute_monthly_upload_stats
 
         log1 = self._create_sample_log(tags=["propulsion"])
         log1.drive_folder = "corrupted_folder_format"
-        log1.file_date = datetime(2026, 8, 10, 14, 0, 0, tzinfo=UTC)
+        log1.log_date = datetime(2026, 8, 10, 14, 0, 0, tzinfo=UTC)
 
         log2 = self._create_sample_log(tags=["telemetry"])
         log2.drive_folder = None
-        log2.file_date = None
-        log2.created_at = datetime(2026, 9, 20, 10, 0, 0, tzinfo=UTC)
+        log2.log_date = None
+        log2.upload_date = datetime(2026, 9, 20, 10, 0, 0, tzinfo=UTC)
 
         # Log with no dates at all should be skipped
         log3 = self._create_sample_log(tags=["orphan"])
         log3.drive_folder = None
-        log3.file_date = None
-        log3.created_at = None  # type: ignore[assignment]
+        log3.log_date = None
+        log3.upload_date = None  # type: ignore[assignment]
 
         stats = compute_monthly_upload_stats([log1, log2, log3])
         folders = [s.folder for s in stats]

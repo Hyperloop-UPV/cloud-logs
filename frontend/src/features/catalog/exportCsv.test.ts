@@ -11,15 +11,14 @@ function makeSampleLog(overrides: Partial<Log> = {}): Log {
     tags: ["bms", "telemetry"],
     note: "Normal test run",
     creator: "engineer-1",
-    startDate: "2026-03-12T10:00:00Z",
-    createdAt: "2026-03-12T09:55:00Z",
+    logDate: "2026-03-12T10:00:00Z",
+    uploadDate: "2026-03-12T09:55:00Z",
     completedAt: "2026-03-12T10:31:00Z",
     driveFolder: "2026_03",
     driveUrl: "https://drive.google.com/file/d/123",
     driveFileId: "drive-123",
     fileHash: "abc123hash",
     clientMetadata: {},
-    fileDate: null,
     createdBy: "user-1",
     ...overrides,
   };
@@ -109,8 +108,8 @@ describe("toCsv", () => {
       '"tags"',
       '"note"',
       '"creator"',
-      '"startDate"',
-      '"createdAt"',
+      '"logDate"',
+      '"uploadDate"',
       '"completedAt"',
       '"driveFolder"',
       '"driveUrl"',
@@ -122,25 +121,25 @@ describe("toCsv", () => {
 
   it("formats dates and handles missing/null dates gracefully", () => {
     const logWithDates = makeSampleLog({
-      startDate: "2026-03-12T10:00:00Z",
+      logDate: "2026-03-12T10:00:00Z",
       completedAt: "2026-03-12T11:05:00Z",
-      createdAt: "2026-03-12T09:50:00Z",
+      uploadDate: "2026-03-12T09:50:00Z",
     });
 
     const logWithoutDates = makeSampleLog({
       id: "log-2",
-      startDate: null,
+      logDate: null,
       completedAt: null,
-      createdAt: "2026-03-12T09:50:00Z",
+      uploadDate: "2026-03-12T09:50:00Z",
     });
 
     const [row1, row2] = parseCsvRows(toCsv([logWithDates, logWithoutDates]));
 
-    expect(row1.startDate).toBe("2026-03-12T10:00:00Z");
+    expect(row1.logDate).toBe("2026-03-12T10:00:00Z");
     expect(row1.completedAt).toBe("2026-03-12T11:05:00Z");
-    expect(row1.createdAt).toBe("2026-03-12T09:50:00Z");
+    expect(row1.uploadDate).toBe("2026-03-12T09:50:00Z");
 
-    expect(row2.startDate).toBe("");
+    expect(row2.logDate).toBe("");
     expect(row2.completedAt).toBe("");
   });
 

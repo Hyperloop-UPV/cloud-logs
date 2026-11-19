@@ -20,17 +20,11 @@ const DEBOUNCE_MS = 300;
 export const PAGE_SIZES = [25, 50, 100] as const;
 const DEFAULT_PAGE_SIZE = 50;
 
-const SORT_KEYS: SortBy[] = [
-  "createdAt",
-  "fileDate",
-  "startDate",
-  "fileName",
-  "fileSize",
-];
+const SORT_KEYS: SortBy[] = ["uploadDate", "logDate", "fileName", "fileSize"];
 
 /** El API devuelve 400 ante un sortBy que no conoce, asi que se sanea aqui. */
 function parseSort(value: string | null): SortBy {
-  return SORT_KEYS.includes(value as SortBy) ? (value as SortBy) : "createdAt";
+  return SORT_KEYS.includes(value as SortBy) ? (value as SortBy) : "uploadDate";
 }
 
 function parseDir(value: string | null): SortOrder {
@@ -182,8 +176,8 @@ export function useLogSearch(): LogSearchState {
       tags: tags.length ? tags : undefined,
       status: status ?? undefined,
       creator: creator || undefined,
-      startDate: toIso(from, "start"),
-      endDate: toIso(to, "end"),
+      fromDate: toIso(from, "start"),
+      toDate: toIso(to, "end"),
       metadataQuery: metadataQuery || undefined,
       driveFolder: driveFolder || undefined,
       sortBy,

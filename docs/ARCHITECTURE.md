@@ -19,8 +19,9 @@ Technical architecture documentation for the centralized telemetry and diagnosti
    - Local database engine powered by SQLite (`aiosqlite`) and SQLAlchemy 2.0 in async mode (WAL mode enabled).
    - Automatic schema and index provisioning on application startup without external database daemons.
    - Standard data types (`Uuid`, `JSON`, `DateTime`).
-4. **Flat Sessionless Catalog**:
-   - Every telemetry log is an independent catalog entry taggable (`tags`) and searchable by author, time window, and subsystem metadata (`client_metadata`).
+4. **Flat Sessionless Catalog (Instantaneous Telemetry Logs)**:
+   - Every telemetry log is an independent catalog entry representing the capture point (`log_date`) and its platform upload timestamp (`upload_date`).
+   - Taggable (`tags`) and searchable by author, capture date (`log_date`), and subsystem metadata (`client_metadata`).
 5. **Role-Based Access Control (RBAC) & Security**:
    - Authentication via GitHub OAuth 2.0 (with optional organization membership validation).
    - Short-lived JWT access tokens (15 min) and rotating refresh tokens with reuse detection (90 days).
@@ -44,10 +45,10 @@ sequenceDiagram
     participant GD as Google Drive API
 
     Note over C,GD: Phase 1: Metadata registration & upload session allocation
-    C->>API: POST /api/v1/logs/initiate (fileName, fileSize, tags, clientMetadata)
+    C->>API: POST /api/v1/logs/initiate (fileName, fileSize, logDate, tags, clientMetadata)
     API->>GD: Create resumable upload session in monthly folder YYYY_MM
     GD-->>API: uploadUrl (Google Drive Resumable Session)
-    API->>DB: INSERT INTO logs (status='pending_upload', drive_folder)
+    API->>DB: INSERT INTO logs (status='pending_upload', drive_folder, log_date, upload_date)
     API-->>C: 200 OK (id, uploadUrl, driveFolder)
 
     Note over C,GD: Direct transfer to Google Drive servers
@@ -104,11 +105,10 @@ erDiagram
         string file_hash "SHA-256 binary hash"
         json tags "Tag list ['pod', 'propulsion']"
         text note "Engineering notes"
-        datetime file_date "Capture timestamp"
-        datetime start_date "Run acquisition start"
+        datetime log_date "Telemetry capture timestamp"
         json client_metadata "Subsystem/runtime metadata"
         Uuid created_by FK "users.id (ON DELETE SET NULL)"
-        datetime created_at "Registration timestamp"
+        datetime upload_date "Registration timestamp (upload to platform)"
         datetime completed_at "Drive completion timestamp"
         datetime deleted_at "Soft delete timestamp"
     }
@@ -117,7 +117,7 @@ erDiagram
 ### Performance Indices
 - `users`: `username` (UK), `github_id` (UK).
 - `refresh_tokens`: `token_hash` (UK), `family_id`.
-- `logs`: `status`, `drive_folder`, `file_hash`, `created_at`, `start_date`.
+- `logs`: `status` (`idx_logs_status`), `drive_folder` (`idx_logs_drive_folder`), `file_hash` (`idx_logs_file_hash`), `upload_date` (`idx_logs_upload_date`), `log_date` (`idx_logs_log_date`).
 
 ### Soft Deletion Strategy
 Log records are never physically removed during normal operation. A soft delete updates `deleted_at = datetime.now(timezone.utc)`. All catalog queries, statistics aggregations, and downloads automatically apply `Log.deleted_at.is_(None)`.

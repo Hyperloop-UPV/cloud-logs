@@ -54,7 +54,7 @@ flowchart TD
 ```
 
 - **Decoupled Binary Storage**: Large telemetry archives (`.zip`) stream directly between clients and Google Drive. The API server brokers sessions and verifies integrity without storing large binaries on host disks.
-- **Async Metadata Catalog**: Powered by SQLite (`aiosqlite`) and SQLAlchemy 2.0 with WAL mode enabled for fast catalog searches, tag indexing, and automated retention policies.
+- **Instantaneous Metadata Catalog**: Powered by SQLite (`aiosqlite`) and SQLAlchemy 2.0 with WAL mode enabled for fast catalog searches by capture date (`logDate`) and upload date (`uploadDate`), tag indexing, and automated retention policies.
 - **Security & RBAC**: GitHub OAuth 2.0 with organization validation (`Hyperloop-UPV`), rotating JWT refresh tokens, and Master API Key for automated pod clients.
 - **Dense Scientific Interface**: Built with Tailwind v4, TanStack Query, and force-directed graph visualizers to inspect mission logs, telemetry tags, and sensor metrics.
 

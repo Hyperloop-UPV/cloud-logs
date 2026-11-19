@@ -141,7 +141,7 @@ export function AboutPage() {
               <p className="text-muted-foreground mt-2 max-w-[42rem] text-sm">
                 The catalogue for the pod's telemetry and diagnostic archives.
                 Every run that leaves the test bench is registered here with its
-                time window, its tags and its author, while the archive itself
+                capture date, its tags and its author, while the archive itself
                 is uploaded straight to Google Drive — this service only keeps
                 track of what exists and where it lives.
               </p>

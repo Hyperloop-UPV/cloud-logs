@@ -82,8 +82,8 @@ export function LogTable({
           </PlainHeader>
           <SortableHeader label="File" col="fileName" {...sortProps} />
           {isVisible("status") && <PlainHeader label="Status" />}
-          {isVisible("window") && (
-            <SortableHeader label="Window" col="startDate" {...sortProps} />
+          {isVisible("logDate") && (
+            <SortableHeader label="Log Date" col="logDate" {...sortProps} />
           )}
           {isVisible("size") && (
             <SortableHeader
@@ -95,8 +95,12 @@ export function LogTable({
           )}
           {isVisible("tags") && <PlainHeader label="Tags" />}
           {isVisible("creator") && <PlainHeader label="Uploaded by" />}
-          {isVisible("created") && (
-            <SortableHeader label="Registered" col="createdAt" {...sortProps} />
+          {isVisible("uploadDate") && (
+            <SortableHeader
+              label="Upload Date"
+              col="uploadDate"
+              {...sortProps}
+            />
           )}
           <PlainHeader label="" align="right" />
         </tr>
@@ -181,14 +185,14 @@ export function LogTable({
                 </td>
               )}
 
-              {isVisible("window") && (
+              {isVisible("logDate") && (
                 <td
                   className={cn(
                     pad,
                     "text-muted-foreground whitespace-nowrap tabular-nums",
                   )}
                 >
-                  {log.startDate ? formatDateTime(log.startDate) : EMPTY}
+                  {log.logDate ? formatDateTime(log.logDate) : EMPTY}
                 </td>
               )}
 
@@ -238,12 +242,12 @@ export function LogTable({
                 </td>
               )}
 
-              {isVisible("created") && (
+              {isVisible("uploadDate") && (
                 <td
                   className={cn(pad, "text-muted-foreground whitespace-nowrap")}
-                  title={formatDateTime(log.createdAt)}
+                  title={formatDateTime(log.uploadDate)}
                 >
-                  {formatRelative(log.createdAt)}
+                  {formatRelative(log.uploadDate)}
                 </td>
               )}
 
