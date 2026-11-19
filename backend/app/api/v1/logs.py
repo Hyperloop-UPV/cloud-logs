@@ -111,7 +111,7 @@ async def initiate_log_upload(
             if parsed.scheme and parsed.netloc:
                 client_origin = f"{parsed.scheme}://{parsed.netloc}"
 
-    target_folder = get_year_month_folder(payload.file_date)
+    target_folder = get_year_month_folder(payload.log_date)
     log_id = uuid4()
 
     upload_url, drive_file_id = await gdrive.create_resumable_upload_session(
@@ -166,11 +166,10 @@ async def initiate_log_upload(
         file_hash=payload.file_hash,
         tags=payload.tags,
         note=payload.note,
-        file_date=payload.file_date,
-        start_date=payload.start_date,
+        log_date=payload.log_date,
         client_metadata=payload.client_metadata,
         created_by=creator_id,
-        created_at=datetime.now(UTC),
+        upload_date=datetime.now(UTC),
     )
 
     db.add(new_log)
@@ -367,19 +366,23 @@ async def search_logs(
         alias="status",
         description="Filter by status ('ready', 'pending_upload', etc.)",
     ),
-    start_date: datetime | None = Query(
-        default=None, alias="startDate", description="Filter logs starting after date"
+    from_date: datetime | None = Query(
+        default=None,
+        alias="fromDate",
+        description="Filter logs captured on or after date",
     ),
-    end_date: datetime | None = Query(
-        default=None, alias="endDate", description="Filter logs ending before date"
+    to_date: datetime | None = Query(
+        default=None,
+        alias="toDate",
+        description="Filter logs captured on or before date",
     ),
     creator: str | None = Query(
         default=None, description="Filter by username of creator"
     ),
     sort_by: str = Query(
-        default="createdAt",
+        default="uploadDate",
         alias="sortBy",
-        description="Sort by: 'createdAt', 'startDate', 'fileName', 'fileSize'",
+        description="Sort by: 'uploadDate', 'logDate', 'fileName', 'fileSize'",
     ),
     sort_order: str = Query(
         default="desc", alias="sortOrder", description="Sort direction: 'asc' or 'desc'"
@@ -415,11 +418,11 @@ async def search_logs(
         for t in tag_list:
             conditions.append(cast(Log.tags, String).like(f'%"{t}"%'))
 
-    if start_date:
-        conditions.append(func.coalesce(Log.start_date, Log.file_date) >= start_date)
+    if from_date:
+        conditions.append(Log.log_date >= from_date)
 
-    if end_date:
-        conditions.append(func.coalesce(Log.start_date, Log.file_date) <= end_date)
+    if to_date:
+        conditions.append(Log.log_date <= to_date)
 
     if creator:
         conditions.append(User.username.ilike(f"%{creator}%"))
@@ -431,12 +434,10 @@ async def search_logs(
 
     # Sorting resolution
     sort_fields = {
-        "createdat": Log.created_at,
-        "created_at": Log.created_at,
-        "filedate": Log.file_date,
-        "file_date": Log.file_date,
-        "startdate": Log.start_date,
-        "start_date": Log.start_date,
+        "uploaddate": Log.upload_date,
+        "upload_date": Log.upload_date,
+        "logdate": Log.log_date,
+        "log_date": Log.log_date,
         "filename": Log.file_name,
         "file_name": Log.file_name,
         "filesize": Log.file_size,
@@ -446,7 +447,7 @@ async def search_logs(
     if sort_key not in sort_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid sortBy field '{sort_by}'. Allowed fields: createdAt, fileDate, startDate, fileName, fileSize",
+            detail=f"Invalid sortBy field '{sort_by}'. Allowed fields: uploadDate, logDate, fileName, fileSize",
         )
     sort_column = sort_fields[sort_key]
 
@@ -535,7 +536,7 @@ def compute_tag_details(logs: Sequence[Log]) -> tuple[int, int, list[TagDetailOu
         dates = [
             (dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC))
             for log in tag_logs
-            if (dt := log.created_at) is not None
+            if (dt := log.upload_date) is not None
         ]
         first_used = min(dates) if dates else None
         last_used = max(dates) if dates else None
@@ -591,7 +592,7 @@ def compute_monthly_upload_stats(logs: Sequence[Log]) -> list[MonthlyUploadStats
                 month = int(parts[1])
 
         if year is None or month is None:
-            ref_dt = log.file_date or log.created_at
+            ref_dt = log.log_date or log.upload_date
             if ref_dt:
                 year = ref_dt.year
                 month = ref_dt.month
@@ -740,7 +741,7 @@ async def get_log_stats(
         select(Log)
         .where(Log.deleted_at.is_(None))
         .options(selectinload(Log.creator_user))
-        .order_by(Log.created_at.desc())
+        .order_by(Log.upload_date.desc())
         .limit(5)
     )
     recent_res = await db.execute(recent_stmt)

@@ -267,8 +267,8 @@ export function LogDetailSheet({
                   </SheetTitle>
                   <SheetDescription className="text-[11px]">
                     Uploaded by {log.creator} ·{" "}
-                    <span title={formatDateTime(log.createdAt)}>
-                      {formatRelative(log.createdAt)}
+                    <span title={formatDateTime(log.uploadDate)}>
+                      {formatRelative(log.uploadDate)}
                     </span>
                   </SheetDescription>
                 </div>
@@ -322,12 +322,11 @@ export function LogDetailSheet({
             <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-6">
               <section>
                 <dl>
-                  <Row label="Window">
-                    {log.startDate ? formatDateTime(log.startDate) : EMPTY}
-                  </Row>
-                  <Row label="Captured">{formatDateTime(log.fileDate)}</Row>
+                  <Row label="Log Date">{formatDateTime(log.logDate)}</Row>
                   <Row label="Size">{formatBytes(log.fileSize)}</Row>
-                  <Row label="Registered">{formatDateTime(log.createdAt)}</Row>
+                  <Row label="Upload Date">
+                    {formatDateTime(log.uploadDate)}
+                  </Row>
                   <Row label="Verified">{formatDateTime(log.completedAt)}</Row>
                 </dl>
               </section>

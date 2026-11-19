@@ -93,9 +93,9 @@ export function RecentActivity({
               </span>
               <span
                 className="text-muted-foreground w-24 shrink-0 text-right"
-                title={formatDateTime(log.createdAt)}
+                title={formatDateTime(log.uploadDate)}
               >
-                {formatRelative(log.createdAt)}
+                {formatRelative(log.uploadDate)}
               </span>
             </Link>
           </li>

@@ -157,9 +157,9 @@ export function SignIn() {
         <div className="bg-primary mt-4 h-[3px] w-10 rounded-full" />
 
         <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
-          Every run that leaves the test bench is registered here with its time
-          window, its tags and its author. Sign in with the GitHub account that
-          belongs to the organisation.
+          Every run that leaves the test bench is registered here with its
+          capture date, its tags and its author. Sign in with the GitHub account
+          that belongs to the organisation.
         </p>
 
         <Button

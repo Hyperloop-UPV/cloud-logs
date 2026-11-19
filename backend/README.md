@@ -10,21 +10,22 @@ Centralized telemetry and diagnostic log metadata catalog service.
   - Telemetry archives (ZIP files) are uploaded directly from clients to Google Drive, automatically organized into monthly subfolders (`YYYY_MM`).
   - The API server never buffers, processes, or stores large binary payloads on local disk.
 - **Two-Phase Upload Workflow**:
-  1. `POST /api/v1/logs/initiate`: Registers initial metadata, subsystem information (`clientMetadata`), tags, and generates a pre-authenticated Google Drive resumable upload session.
+  1. `POST /api/v1/logs/initiate`: Registers initial metadata (`fileName`, `fileSize`, `logDate`), subsystem information (`clientMetadata`), tags, and generates a pre-authenticated Google Drive resumable upload session.
   2. Direct Client Transfer: The client streams the ZIP binary directly to Google Drive.
   3. `POST /api/v1/logs/{id}/complete`: The server verifies the file's presence and integrity in Google Drive, marking the log as `ready`.
   - `POST /api/v1/logs/{id}/abort`: Allows clients/operators to explicitly cancel pending transfers.
 - **SQLite Persistence**:
   - Fully asynchronous local database engine powered by `aiosqlite` and SQLAlchemy 2.0.
   - Automatic schema and index provisioning on application startup without external database dependencies.
+  - Optimized indices: `idx_logs_upload_date`, `idx_logs_log_date`, `idx_logs_status`, `idx_logs_drive_folder`, `idx_logs_file_hash`.
 - **Role-Based Access Control & Authentication**:
   - **GitHub OAuth 2.0**: Validates membership within the `Hyperloop-UPV` GitHub organization.
   - **JWT & Rotating Refresh Tokens**: Short-lived access tokens (15 minutes) paired with secure `HttpOnly` refresh tokens featuring token-family reuse detection.
   - **Master API Key**: High-privilege service key (`X-API-Key` or `Authorization: Bearer <key>`) for pod on-board systems, CI/CD runners, and headless automation.
   - **Roles**: All registered team members default to `user` (common user access to upload, search, download, and manage logs). Members can be explicitly promoted to `admin` (or demoted) via `PATCH /api/v1/users/{id}/role` by existing admins or using the Master API Key.
 - **Search, Sorting, Autocomplete & Statistics**:
-  - Full catalog filtering by tags, author, date ranges (`startDate`, `endDate`), and full-text notes/filenames (`textQuery`).
-  - Multi-field sorting (`sortBy`: `createdAt`, `fileDate`, `startDate`, `fileName`, `fileSize`) and direction (`sortOrder`: `asc`, `desc`).
+  - Full catalog filtering by tags, author, date ranges (`fromDate`, `toDate` filtering by instantaneous `logDate`), and full-text notes/filenames (`textQuery`).
+  - Multi-field sorting (`sortBy`: `uploadDate` [default], `logDate`, `fileName`, `fileSize`) and direction (`sortOrder`: `asc`, `desc`).
   - Restricted internal client metadata search (`metadataQuery`, admin-only).
   - Autocomplete endpoint (`GET /api/v1/logs/tags`) for frontend UI tagging.
   - Aggregated metrics endpoint (`GET /api/v1/logs/stats`) reporting totals, storage size, status breakdown, and top tags.
@@ -82,6 +83,28 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - **ReDoc**: [http://localhost:8000/redoc](http://localhost:8000/redoc) (or behind reverse proxy: `/redoc`)
 - **OpenAPI Schema**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 - **Health Check**: [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
+
+### 5. Quick cURL Examples
+
+#### Search instantaneous logs (filtered by logDate, sorted by uploadDate)
+```bash
+curl -X GET "http://localhost:8000/api/v1/logs?fromDate=2026-10-01T00:00:00Z&toDate=2026-10-31T23:59:59Z&sortBy=uploadDate&sortOrder=desc" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+#### Initiate instantaneous telemetry log upload
+```bash
+curl -X POST "http://localhost:8000/api/v1/logs/initiate" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "fileName": "run_42_telemetry.zip",
+    "fileSize": 104857600,
+    "logDate": "2026-10-23T10:00:00Z",
+    "tags": ["pod", "propulsion"],
+    "note": "Track run with inverter at 80% throttle"
+  }'
+```
 
 ---
 

@@ -10,11 +10,11 @@ import { useCallback, useEffect, useState } from "react";
 
 export const COLUMNS = [
   { id: "status", label: "Status" },
-  { id: "window", label: "Window" },
+  { id: "logDate", label: "Log Date" },
   { id: "size", label: "Size" },
   { id: "tags", label: "Tags" },
   { id: "creator", label: "Uploaded by" },
-  { id: "created", label: "Registered" },
+  { id: "uploadDate", label: "Upload Date" },
 ] as const;
 
 export type ColumnId = (typeof COLUMNS)[number]["id"];
@@ -41,10 +41,9 @@ function parse(raw: string | null): TablePrefs {
   if (!raw) return DEFAULTS;
   try {
     const parsed = JSON.parse(raw) as Partial<TablePrefs>;
+    const rawHidden = Array.isArray(parsed.hidden) ? parsed.hidden : [];
     return {
-      hidden: Array.isArray(parsed.hidden)
-        ? parsed.hidden.filter((id): id is ColumnId => COLUMN_IDS.has(id))
-        : [],
+      hidden: rawHidden.filter((id): id is ColumnId => COLUMN_IDS.has(id)),
       density: parsed.density === "compact" ? "compact" : "comfortable",
     };
   } catch {

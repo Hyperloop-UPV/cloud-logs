@@ -73,11 +73,7 @@ class Log(Base):
         Text,
         nullable=True,
     )
-    file_date: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-    start_date: Mapped[datetime | None] = mapped_column(
+    log_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -91,7 +87,7 @@ class Log(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    created_at: Mapped[datetime] = mapped_column(
+    upload_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
@@ -119,6 +115,6 @@ class Log(Base):
         Index("idx_logs_status", "status"),
         Index("idx_logs_drive_folder", "drive_folder"),
         Index("idx_logs_file_hash", "file_hash"),
-        Index("idx_logs_created_at", "created_at"),
-        Index("idx_logs_start_date", "start_date"),
+        Index("idx_logs_upload_date", "upload_date"),
+        Index("idx_logs_log_date", "log_date"),
     )

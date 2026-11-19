@@ -46,7 +46,7 @@ export function useTagAggregate() {
         searchLogs({
           page: 1,
           pageSize: PAGE_SIZE,
-          sortBy: "createdAt",
+          sortBy: "uploadDate",
           sortOrder: "desc",
         }),
       ]);
@@ -61,7 +61,7 @@ export function useTagAggregate() {
           const result = await searchLogs({
             page,
             pageSize: PAGE_SIZE,
-            sortBy: "createdAt",
+            sortBy: "uploadDate",
             sortOrder: "desc",
           });
           collected.push(...result.items);

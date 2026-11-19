@@ -19,11 +19,8 @@ class LogInitiateRequest(CamelModel):
         description="File name (e.g. telemetry_run.zip)",
     )
     file_size: int = Field(..., ge=0, description="Size in bytes of the file to upload")
-    file_date: datetime | None = Field(
-        default=None, description="Date of capture/creation of the log"
-    )
-    start_date: datetime | None = Field(
-        default=None, description="Start timestamp of telemetry data"
+    log_date: datetime | None = Field(
+        default=None, description="Log recording/capture timestamp"
     )
     file_hash: str | None = Field(
         default=None, description="Expected SHA-256 hash if pre-calculated"
@@ -126,11 +123,10 @@ class LogOut(CamelModel):
     tags: list[str] = Field(default_factory=list)
     note: str | None = None
     client_metadata: dict[str, Any] = Field(default_factory=dict)
-    file_date: datetime | None = None
-    start_date: datetime | None = None
+    log_date: datetime | None = None
     created_by: UUID | None = None
     creator: str = "unknown"
-    created_at: datetime
+    upload_date: datetime
     completed_at: datetime | None = None
 
     @field_validator("tags", mode="before")

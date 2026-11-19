@@ -74,7 +74,7 @@ export function DashboardPage() {
       {
         page: 1,
         pageSize: RECENT_COUNT,
-        sortBy: "createdAt",
+        sortBy: "uploadDate",
         sortOrder: "desc",
       },
     ],
@@ -82,7 +82,7 @@ export function DashboardPage() {
       searchLogs({
         page: 1,
         pageSize: RECENT_COUNT,
-        sortBy: "createdAt",
+        sortBy: "uploadDate",
         sortOrder: "desc",
       }),
     enabled: !stats.data?.recentUploads,

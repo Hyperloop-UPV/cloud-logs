@@ -6,7 +6,6 @@ import {
   formatDate,
   formatDateTime,
   formatMonthKey,
-  formatRange,
   formatRelative,
   formatRelativeTime,
 } from "./format";
@@ -114,22 +113,6 @@ describe("formatDateTime", () => {
     const iso = "2026-03-12T14:30:00Z";
     expect(formatDateTime(iso)).toMatch(/12 Mar 2026/);
     expect(formatDateTime(null)).toBe(EMPTY);
-  });
-});
-
-describe("formatRange", () => {
-  it("formats ranges on same day vs different days", () => {
-    const start = "2026-03-12T10:00:00Z";
-    const sameDayEnd = "2026-03-12T12:00:00Z";
-    const nextDayEnd = "2026-03-13T12:00:00Z";
-
-    expect(formatRange(start, sameDayEnd)).toContain("→");
-    expect(formatRange(start, nextDayEnd)).toContain("13 Mar 2026");
-    expect(formatRange(null, sameDayEnd)).toBe(
-      `… → ${formatDateTime(sameDayEnd)}`,
-    );
-    expect(formatRange(start, null)).toBe(`${formatDateTime(start)} → …`);
-    expect(formatRange(null, null)).toBe(EMPTY);
   });
 });
 

@@ -40,7 +40,7 @@ export function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [tags, setTags] = useState<string[]>([]);
   const [note, setNote] = useState("");
-  const [start, setStart] = useState("");
+  const [logDate, setLogDate] = useState("");
   const [rejected, setRejected] = useState<string[]>([]);
 
   const tagSuggestions = useQuery({ queryKey: ["logTags"], queryFn: listTags });
@@ -61,8 +61,7 @@ export function UploadPage() {
       {
         tags,
         note: note || null,
-        startDate: toIso(start),
-        fileDate: toIso(start) ?? null,
+        logDate: toIso(logDate) ?? null,
         fileHash: null,
         clientMetadata: {},
       },
@@ -174,11 +173,11 @@ export function UploadPage() {
               </div>
 
               <div className="flex flex-col gap-1">
-                <Label className="text-[11px]">Starts</Label>
+                <Label className="text-[11px]">Log Date</Label>
                 <Input
                   type="datetime-local"
-                  value={start}
-                  onChange={(event) => setStart(event.target.value)}
+                  value={logDate}
+                  onChange={(event) => setLogDate(event.target.value)}
                   className="h-8 text-xs shadow-none"
                 />
               </div>
